@@ -1,0 +1,6 @@
+#+title: Writing my Own Compiler
+#+author: YSB
+* What I already understand
+- A compiler has 2 main parts that is a front-end and a back-end.
+- Now, the front end includes, a lexor that parses the actual code written by the user and converts it into some kind of inter-mediatory code.
+- Now this inter-mediatory code is used by some kind of framework such as (llvm) or some kind of back-end that I will have to write on my own and that compiles it into x86-64 assembly.
