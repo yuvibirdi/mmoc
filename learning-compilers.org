@@ -6,7 +6,6 @@
 - Now this inter-mediatory code is used by some kind of framework such as (llvm) or some kind of back-end that I will have to write on my own and that compiles it into x86-64 assembly.
 * Learning LLVM
 - Following the LLVM Reference Manual at https://llvm.org/docs/LangRef.html#preserving-debug-information-intrinsics
-
 ** What is LLVM useful for
 - 3 main forms:
   - in-memory compiler IR
@@ -69,9 +68,9 @@ comments work with ; till the end of the line and /* */ for everything in betwee
 declare i32 @puts(ptr captures(none)) nounwind
 ; Definition of the main function
 define i32 @main(){
-; Call puts function to write out the string to stdout.
-call i32 @puts(ptr @.str)
-return i32 0
+  ; Call puts function to write out the string to stdout.
+  call i32 @puts(ptr @.str)
+  return i32 0
 }
 
 ; Named metadata
@@ -81,4 +80,4 @@ return i32 0
 
 
 
-
+** I can Use Lean 4 to Write a parser for my first project 
