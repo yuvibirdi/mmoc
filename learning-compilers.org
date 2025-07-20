@@ -78,6 +78,3 @@ define i32 @main(){
 !foo = !{!0}
 #+end_src
 
-
-
-** I can Use Lean 4 to Write a parser for my first project 
