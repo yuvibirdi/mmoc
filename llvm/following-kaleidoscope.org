@@ -1,0 +1,59 @@
+#+title:     Learning Kaleidoscope
+#+author:    YSB
+#+email:     yuvibirdi27@gmail.com
+#+OPTIONS: toc:2
+#+LATEX_CLASS: article
+#+LATEX_CLASS_OPTIONS: [10pt]
+#+LATEX_HEADER: \usepackage[pdftex]{graphicx,color}
+#+LATEX_HEADER: \usepackage{tikz, quiver, cancel}
+#+LATEX_HEADER: \usepackage{amsmath,amsfonts,amsthm,amssymb,amscd,enumerate, url, anysize, hyperref, accents, slashed, mathtools, pgfplots}
+#+LATEX_HEADER: \marginsize{1in}{1in}{1in}{1in}
+#+LATEX_HEADER: \newcounter{commentCounter}
+#+LATEX_HEADER: \setcounter{commentCounter}{1} 
+#+LATEX_HEADER: \newcommand{\note}[1]{\par\noindent{\sffamily\textbf{\textcolor{orange}{Note \arabic{commentCounter}: #1}}}\par\stepcounter{commentCounter}}
+#+LATEX_HEADER: \theoremstyle{plain}
+#+LATEX_HEADER: \newtheorem{thm}{Theorem}[section]
+#+LATEX_HEADER: \newtheorem{prop}[thm]{Proposition} #+LATEX_HEADER: \newtheorem{lemma}[thm]{Lemma}
+#+LATEX_HEADER: \newtheorem{cor}[thm]{Corollary}
+#+LATEX_HEADER: \theoremstyle{definition}
+#+LATEX_HEADER: \newtheorem{defn}[thm]{Definition}
+#+LATEX_HEADER: \newtheorem{ex}[thm]{Example}
+#+LATEX_HEADER: \newtheorem{quest}[thm]{Question}
+#+LATEX_HEADER: \theoremstyle{axiom}
+#+LATEX_HEADER: \newtheorem{axiom}{Axiom}[section]
+#+LATEX_HEADER: \newtheorem{ax}[axiom]{Axiom}
+#+LATEX_HEADER: \newtheorem{as}[axiom]{Assumption}
+#+LATEX_HEADER: \theoremstyle{remark}
+#+LATEX_HEADER: \newtheorem{rmk}[thm]{Remark}
+#+LATEX_HEADER: \renewcommand{\vec}[1]{\mathbf{#1}}
+#+LATEX_HEADER: \newcommand{\dt}{\mathbin{\boldsymbol{\cdot}}}
+#+LATEX_HEADER: \newcommand{\iso}{\cong}
+#+LATEX_HEADER: \newcommand{\cross}{\mathbin{\times}}
+#+LATEX_HEADER: \newcommand{\Dirac}[1]{\slashed{D}_{#1}}
+#+LATEX_HEADER: \newcommand{\pp}{\mathbin{+ \! +}}
+#+LATEX_HEADER: \newcommand{\mm}{\mathbin{- \! -}}
+#+LATEX_HEADER: \newcommand{\dd}{\mathrm{d}}
+#+LATEX_HEADER: \DeclareMathOperator\grad{grad}
+#+LATEX_HEADER: \DeclareMathOperator\dive{div}
+#+LATEX_HEADER: \DeclareMathOperator\Div{Div}
+#+LATEX_HEADER: \DeclareMathOperator\curl{curl}
+#+LATEX_HEADER: \DeclareMathOperator\vol{vol}
+#+LATEX_HEADER: \DeclareMathOperator\Hol{Hol}
+#+LATEX_HEADER: \DeclareMathOperator\adj{adj}
+#+LATEX_HEADER: \DeclareMathOperator\tr{tr}
+#+LATEX_HEADER: \DeclareMathOperator\inj{inj}
+#+LATEX_HEADER: \DeclareMathOperator\pf{Pf}
+#+LATEX_HEADER: \newcommand\tRc{\mathrm{Ric}}
+#+LATEX_HEADER: \newcommand\tR{\mathrm{R}}
+#+LATEX_HEADER: \newcommand{\tRm}{\mathrm{Rm}}
+#+LATEX_HEADER: \DeclareMathOperator{\id}{id}
+#+LATEX_HEADER: \DeclareMathOperator{\Id}{Id}
+#+LATEX_HEADER: \DeclareMathOperator{\sgn}{sgn}
+#+LATEX_HEADER: \DeclareMathOperator{\supp}{supp}
+#+LATEX_HEADER: \DeclareMathOperator{\Hess}{Hess}
+
+* What is Kaleidoscope ?
+It is a toy language the llvm project uses to showcase how to learn llvm
+*  
+
+
