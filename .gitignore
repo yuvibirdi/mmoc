@@ -1,0 +1,49 @@
+# Generated ANTLR files
+generated/
+*.interp
+*.tokens
+
+# Build artifacts
+build/
+*.o
+*.so
+*.dylib
+*.dll
+*.exe
+a.out
+
+# IDE files
+.vscode/settings.json
+.clangd/
+compile_commands.json
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+
+# Testing
+Testing/
+
+# Temporary files
+*.tmp
+*.log
+*.ll
+*.bc
+
+# macOS
+.DS_Store
+
+# Coverage reports
+*.gcov
+*.gcda
+*.gcno
+coverage/
+
+# Documentation builds
+docs/_build/
+docs/html/
+
+# Package files
+*.deb
+*.rpm
+*.pkg

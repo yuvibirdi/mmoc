@@ -1,0 +1,90 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        build_type: [Release, Debug]
+    
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup CMake
+      uses: lukka/get-cmake@latest
+    
+    - name: Install dependencies (Ubuntu)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          llvm-17 \
+          llvm-17-dev \
+          clang-17 \
+          lld-17 \
+          libantlr4-runtime-dev \
+          antlr4 \
+          pkg-config \
+          ninja-build \
+          cppcheck
+        # Create symlinks for tools
+        sudo ln -sf /usr/bin/llvm-config-17 /usr/bin/llvm-config
+        sudo ln -sf /usr/bin/clang-17 /usr/bin/clang
+        sudo ln -sf /usr/bin/clang++-17 /usr/bin/clang++
+    
+    - name: Install dependencies (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        brew install \
+          llvm \
+          antlr4 \
+          antlr4-cpp-runtime \
+          ninja \
+          cppcheck \
+          pkg-config
+        # Add LLVM to PATH
+        echo "$(brew --prefix llvm)/bin" >> $GITHUB_PATH
+        # Set up ANTLR
+        echo "CLASSPATH=$(brew --prefix)/opt/antlr4-runtime/libexec/antlr-4.13.2-complete.jar:$CLASSPATH" >> $GITHUB_ENV
+    
+    - name: Cache ANTLR generated files
+      uses: actions/cache@v3
+      with:
+        path: generated/
+        key: antlr-${{ hashFiles('grammar/C.g4') }}
+    
+    - name: Configure CMake
+      run: |
+        cmake -B build \
+          -G Ninja \
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+          -DCMAKE_C_COMPILER=clang \
+          -DCMAKE_CXX_COMPILER=clang++
+    
+    - name: Build
+      run: cmake --build build --target all -j
+    
+    - name: Run static analysis
+      if: matrix.build_type == 'Debug'
+      run: |
+        cppcheck --enable=all --error-exitcode=1 --suppress=missingIncludeSystem src/
+    
+    - name: Run tests
+      run: ctest --test-dir build --output-on-failure -j
+    
+    - name: Upload build artifacts
+      if: failure()
+      uses: actions/upload-artifact@v3
+      with:
+        name: build-logs-${{ matrix.os }}-${{ matrix.build_type }}
+        path: |
+          build/CMakeFiles/CMakeOutput.log
+          build/CMakeFiles/CMakeError.log
