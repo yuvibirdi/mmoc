@@ -38,6 +38,10 @@ public:
     antlrcpp::Any visitIterationStatement(CParser::IterationStatementContext *ctx) override;
     antlrcpp::Any visitJumpStatement(CParser::JumpStatementContext *ctx) override;
     
+    // For loop components
+    antlrcpp::Any visitForDeclaration(CParser::ForDeclarationContext *ctx) override;
+    antlrcpp::Any visitForExpression(CParser::ForExpressionContext *ctx) override;
+    
     // Expressions
     antlrcpp::Any visitExpression(CParser::ExpressionContext *ctx) override;
     antlrcpp::Any visitAssignmentExpression(CParser::AssignmentExpressionContext *ctx) override;

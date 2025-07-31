@@ -41,6 +41,13 @@ private:
     // Current function being generated
     llvm::Function *currentFunction_ = nullptr;
     
+    // Loop context for break/continue statements
+    struct LoopContext {
+        llvm::BasicBlock *continueBlock;  // Where continue should jump
+        llvm::BasicBlock *breakBlock;     // Where break should jump
+    };
+    std::vector<LoopContext> loopStack_;
+    
     // Visit methods for different AST node types
     void visitTranslationUnit(ast::TranslationUnit *tu);
     void visitFunctionDecl(ast::FunctionDecl *func);
@@ -53,6 +60,8 @@ private:
     llvm::Value* visitIfStmt(ast::IfStmt *stmt);
     llvm::Value* visitWhileStmt(ast::WhileStmt *stmt);
     llvm::Value* visitForStmt(ast::ForStmt *stmt);
+    llvm::Value* visitBreakStmt(ast::BreakStmt *stmt);
+    llvm::Value* visitContinueStmt(ast::ContinueStmt *stmt);
     
     llvm::Value* visitExpr(ast::Expr *expr);
     llvm::Value* visitIntegerLiteral(ast::IntegerLiteral *lit);

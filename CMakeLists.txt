@@ -1,12 +1,11 @@
 cmake_minimum_required(VERSION 3.20)
 project(mmoc VERSION 1.0.0 LANGUAGES C CXX)
 
-# C++20 standard
+# Set C++ standard and compiler flags
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Compiler flags
+# Compiler flags (LLVM-specific warnings will be suppressed via system includes)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -pedantic")
 set(CMAKE_CXX_FLAGS_DEBUG "-g -O0")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
@@ -60,6 +59,9 @@ target_include_directories(cgrammar PUBLIC ${CMAKE_SOURCE_DIR}/generated)
 target_link_libraries(cgrammar PUBLIC ${ANTLR4_LIBRARY})
 target_include_directories(cgrammar PUBLIC ${ANTLR4_INCLUDE_DIR})
 
+# Suppress warnings for ANTLR generated code
+target_compile_options(cgrammar PRIVATE -Wno-unused-parameter)
+
 # AST library
 add_library(cast STATIC
     src/ast/Node.cpp
@@ -81,7 +83,7 @@ add_library(ccodegen STATIC
     src/codegen/IRGenerator.cpp
 )
 target_include_directories(ccodegen PUBLIC src)
-target_link_libraries(ccodegen PUBLIC cast ${LLVM_LIBS})
+target_link_libraries(ccodegen PUBLIC cast)
 
 # Parser library
 add_library(cparser STATIC
@@ -106,8 +108,9 @@ target_link_libraries(ccomp PRIVATE
     csema 
     ccodegen 
     cutils
-    ${LLVM_LIBS}
 )
+# Link LLVM libraries separately to avoid duplicates
+target_link_libraries(ccomp PRIVATE ${LLVM_LIBS})
 
 # Enable testing
 enable_testing()

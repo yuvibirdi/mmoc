@@ -58,12 +58,26 @@ antlrcpp::Any ASTBuilder::visitFunctionDefinition(CParser::FunctionDefinitionCon
 }
 
 antlrcpp::Any ASTBuilder::visitDeclaration(CParser::DeclarationContext *ctx) {
-    std::string type = extractTypeFromSpecifiers(ctx->declarationSpecifiers());
+    std::string baseType = extractTypeFromSpecifiers(ctx->declarationSpecifiers());
     
     if (ctx->initDeclaratorList()) {
         // For now, handle single variable declarations
         auto *initDecl = ctx->initDeclaratorList()->initDeclarator(0);
-        std::string name = extractIdentifierName(initDecl->declarator()->directDeclarator());
+        auto *declarator = initDecl->declarator();
+        
+        // Build full type including pointers
+        std::string fullType = baseType;
+        if (declarator->pointer()) {
+            // Count the number of '*' characters for pointer depth
+            std::string pointerText = declarator->pointer()->getText();
+            for (char c : pointerText) {
+                if (c == '*') {
+                    fullType += "*";
+                }
+            }
+        }
+        
+        std::string name = extractIdentifierName(declarator->directDeclarator());
         
         std::unique_ptr<ast::Expr> initializer = nullptr;
         if (initDecl->initializer()) {
@@ -72,7 +86,7 @@ antlrcpp::Any ASTBuilder::visitDeclaration(CParser::DeclarationContext *ctx) {
             initializer = std::unique_ptr<ast::Expr>(expr_ptr);
         }
         
-        return static_cast<ast::Node*>(new ast::VarDecl(name, type, std::move(initializer)));
+        return static_cast<ast::Node*>(new ast::VarDecl(name, fullType, std::move(initializer)));
     }
     
     return nullptr;
@@ -135,9 +149,19 @@ antlrcpp::Any ASTBuilder::visitAssignmentExpression(CParser::AssignmentExpressio
         auto rightResult = visit(ctx->assignmentExpression());
         auto right = std::unique_ptr<ast::Expr>(std::any_cast<ast::Expr*>(rightResult));
         
-        // For now, only handle simple assignment
+        // Parse the assignment operator type
+        std::string opText = ctx->assignmentOperator()->getText();
+        ast::BinaryExpr::OpKind op = ast::BinaryExpr::OpKind::Assign; // Default
+        
+        if (opText == "=") op = ast::BinaryExpr::OpKind::Assign;
+        else if (opText == "+=") op = ast::BinaryExpr::OpKind::AddAssign;
+        else if (opText == "-=") op = ast::BinaryExpr::OpKind::SubAssign;
+        else if (opText == "*=") op = ast::BinaryExpr::OpKind::MulAssign;
+        else if (opText == "/=") op = ast::BinaryExpr::OpKind::DivAssign;
+        else if (opText == "%=") op = ast::BinaryExpr::OpKind::ModAssign;
+        
         return std::any(static_cast<ast::Expr*>(new ast::BinaryExpr(
-            std::move(left), std::move(right), ast::BinaryExpr::OpKind::Assign
+            std::move(left), std::move(right), op
         )));
     }
     return visit(ctx->conditionalExpression());
@@ -249,8 +273,19 @@ antlrcpp::Any ASTBuilder::visitRelationalExpression(CParser::RelationalExpressio
     for (size_t i = 1; i < ctx->shiftExpression().size(); ++i) {
         auto right = extractExpr(visit(ctx->shiftExpression(i)));
         
-        // Simplified - assume < for now
-        ast::BinaryExpr::OpKind op = ast::BinaryExpr::OpKind::LT;
+        ast::BinaryExpr::OpKind op = ast::BinaryExpr::OpKind::LT; // Default
+        
+        // Find the operator between expressions
+        if (2*i - 1 < ctx->children.size()) {
+            auto *token = dynamic_cast<antlr4::tree::TerminalNode*>(ctx->children[2*i - 1]);
+            if (token) {
+                std::string opText = token->getText();
+                if (opText == "<") op = ast::BinaryExpr::OpKind::LT;
+                else if (opText == ">") op = ast::BinaryExpr::OpKind::GT;
+                else if (opText == "<=") op = ast::BinaryExpr::OpKind::LE;
+                else if (opText == ">=") op = ast::BinaryExpr::OpKind::GE;
+            }
+        }
         
         left = std::make_unique<ast::BinaryExpr>(std::move(left), std::move(right), op);
     }
@@ -356,13 +391,56 @@ antlrcpp::Any ASTBuilder::visitUnaryExpression(CParser::UnaryExpressionContext *
 }
 
 antlrcpp::Any ASTBuilder::visitPostfixExpression(CParser::PostfixExpressionContext *ctx) {
+    // Start with the base expression (primaryExpression or compound literal)
+    std::unique_ptr<ast::Expr> expr;
     if (ctx->primaryExpression()) {
-        return visit(ctx->primaryExpression());
+        auto result = visit(ctx->primaryExpression());
+        expr = extractExpr(result);
+    } else {
+        // Handle compound literals if needed
+        return nullptr;
     }
     
-    // Handle function calls, array subscripts, etc.
-    // For now, just return primary expression
-    return visit(ctx->primaryExpression());
+    // Process postfix operators in sequence
+    size_t childIndex = 1; // Skip the primary expression
+    while (childIndex < ctx->children.size()) {
+        auto *child = ctx->children[childIndex];
+        
+        // Check for function call: '(' argumentExpressionList? ')'
+        if (auto *terminal = dynamic_cast<antlr4::tree::TerminalNode*>(child)) {
+            if (terminal->getSymbol()->getType() == CParser::LeftParen) {
+                // This is a function call
+                std::vector<std::unique_ptr<ast::Expr>> args;
+                
+                // Look for argumentExpressionList
+                if (childIndex + 1 < ctx->children.size()) {
+                    auto *nextChild = ctx->children[childIndex + 1];
+                    if (auto *argList = dynamic_cast<CParser::ArgumentExpressionListContext*>(nextChild)) {
+                        for (auto *argExpr : argList->assignmentExpression()) {
+                            auto argResult = visit(argExpr);
+                            auto arg = extractExpr(argResult);
+                            if (arg) {
+                                args.push_back(std::move(arg));
+                            }
+                        }
+                        childIndex += 2; // Skip argumentExpressionList and ')'
+                    } else {
+                        childIndex += 1; // Skip just ')'
+                    }
+                }
+                
+                expr = std::make_unique<ast::CallExpr>(std::move(expr), std::move(args));
+                childIndex++; // Move to next token after ')'
+                continue;
+            }
+        }
+        
+        // Handle other postfix operators (array subscript, member access, increment/decrement)
+        // For now, skip them
+        childIndex++;
+    }
+    
+    return std::any(expr.release());
 }
 
 antlrcpp::Any ASTBuilder::visitPrimaryExpression(CParser::PrimaryExpressionContext *ctx) {
@@ -528,14 +606,145 @@ antlrcpp::Any ASTBuilder::visitDirectDeclarator(CParser::DirectDeclaratorContext
 }
 
 antlrcpp::Any ASTBuilder::visitIterationStatement(CParser::IterationStatementContext *ctx) {
-    // Stub implementation
-    (void)ctx; // Suppress unused parameter warning
+    // Check if this is a while statement by looking for 'while' token
+    bool isWhileStatement = false;
+    bool isForStatement = false;
+    
+    for (auto child : ctx->children) {
+        if (auto terminal = dynamic_cast<antlr4::tree::TerminalNode*>(child)) {
+            if (terminal->getText() == "while") {
+                isWhileStatement = true;
+                break;
+            } else if (terminal->getText() == "for") {
+                isForStatement = true;
+                break;
+            }
+        }
+    }
+    
+    if (isWhileStatement) {
+        // Parse while statement: while '(' expression ')' statement
+        if (ctx->children.size() >= 5) {
+            // Get condition expression (index 2, between parentheses)
+            auto conditionCtx = ctx->children[2];
+            auto conditionResult = visit(conditionCtx);
+            auto condition = std::any_cast<ast::Expr*>(conditionResult);
+            
+            // Get body statement (index 4)
+            auto bodyCtx = ctx->children[4];
+            auto bodyResult = visit(bodyCtx);
+            
+            // Handle both CompoundStmt and regular Stmt
+            ast::Stmt* body = nullptr;
+            try {
+                body = std::any_cast<ast::Stmt*>(bodyResult);
+            } catch (const std::bad_any_cast&) {
+                // Try CompoundStmt
+                auto compoundBody = std::any_cast<ast::CompoundStmt*>(bodyResult);
+                body = static_cast<ast::Stmt*>(compoundBody);
+            }
+            
+            return std::any(static_cast<ast::Stmt*>(new ast::WhileStmt(
+                std::unique_ptr<ast::Expr>(condition),
+                std::unique_ptr<ast::Stmt>(body)
+            )));
+        }
+    } else if (isForStatement) {
+        // Parse for statement: for '(' forCondition ')' statement
+        if (ctx->children.size() >= 5) {
+            // Get the forCondition context (index 2)
+            auto forConditionCtx = dynamic_cast<CParser::ForConditionContext*>(ctx->children[2]);
+            if (forConditionCtx) {
+                // Parse the three parts of the for condition
+                ast::Stmt* init = nullptr;
+                ast::Expr* condition = nullptr;
+                ast::Expr* increment = nullptr;
+                
+                // Get init (forDeclaration or expression)
+                if (forConditionCtx->forDeclaration()) {
+                    auto initResult = visit(forConditionCtx->forDeclaration());
+                    init = std::any_cast<ast::Stmt*>(initResult);
+                } else if (forConditionCtx->expression()) {
+                    auto initResult = visit(forConditionCtx->expression());
+                    auto initExpr = std::any_cast<ast::Expr*>(initResult);
+                    // Wrap expression in an expression statement
+                    init = new ast::ExprStmt(std::unique_ptr<ast::Expr>(initExpr));
+                }
+                
+                // Get condition (first forExpression)
+                if (forConditionCtx->forExpression().size() > 0) {
+                    auto condResult = visit(forConditionCtx->forExpression(0));
+                    condition = std::any_cast<ast::Expr*>(condResult);
+                }
+                
+                // Get increment (second forExpression)
+                if (forConditionCtx->forExpression().size() > 1) {
+                    auto incResult = visit(forConditionCtx->forExpression(1));
+                    increment = std::any_cast<ast::Expr*>(incResult);
+                }
+                
+                // Get body statement (index 4)
+                auto bodyCtx = ctx->children[4];
+                auto bodyResult = visit(bodyCtx);
+                
+                // Handle both CompoundStmt and regular Stmt
+                ast::Stmt* body = nullptr;
+                try {
+                    body = std::any_cast<ast::Stmt*>(bodyResult);
+                } catch (const std::bad_any_cast&) {
+                    // Try CompoundStmt
+                    auto compoundBody = std::any_cast<ast::CompoundStmt*>(bodyResult);
+                    body = static_cast<ast::Stmt*>(compoundBody);
+                }
+                
+                return std::any(static_cast<ast::Stmt*>(new ast::ForStmt(
+                    std::unique_ptr<ast::Stmt>(init),
+                    std::unique_ptr<ast::Expr>(condition),
+                    std::unique_ptr<ast::Expr>(increment),
+                    std::unique_ptr<ast::Stmt>(body)
+                )));
+            }
+        }
+    }
+    
+    // For other iteration statements (do-while), return stub for now
     return nullptr;
 }
 
 antlrcpp::Any ASTBuilder::visitSelectionStatement(CParser::SelectionStatementContext *ctx) {
-    // Stub implementation  
-    (void)ctx; // Suppress unused parameter warning
+    // Check if this is an if statement by looking for 'if' token
+    bool isIfStatement = false;
+    for (auto child : ctx->children) {
+        if (auto terminal = dynamic_cast<antlr4::tree::TerminalNode*>(child)) {
+            if (terminal->getText() == "if") {
+                isIfStatement = true;
+                break;
+            }
+        }
+    }
+    
+    if (isIfStatement) {
+        // Get the condition expression
+        auto conditionResult = visit(ctx->expression());
+        auto condition = extractExpr(conditionResult);
+        
+        // Get the then statement  
+        auto thenResult = visit(ctx->statement(0));
+        auto thenStmt = extractStmt(thenResult);
+        
+        // Get the else statement if present
+        std::unique_ptr<ast::Stmt> elseStmt = nullptr;
+        if (ctx->statement().size() > 1) {
+            auto elseResult = visit(ctx->statement(1));
+            elseStmt = extractStmt(elseResult);
+        }
+        
+        return std::any(static_cast<ast::Stmt*>(new ast::IfStmt(
+            std::move(condition), std::move(thenStmt), std::move(elseStmt)
+        )));
+    }
+    
+    // TODO: Handle switch statement
     return nullptr;
 }
 
@@ -548,6 +757,49 @@ antlrcpp::Any ASTBuilder::visitParameterDeclaration(CParser::ParameterDeclaratio
 antlrcpp::Any ASTBuilder::visitDeclarationSpecifiers(CParser::DeclarationSpecifiersContext *ctx) {
     // Stub implementation
     (void)ctx; // Suppress unused parameter warning
+    return nullptr;
+}
+
+antlrcpp::Any ASTBuilder::visitForDeclaration(CParser::ForDeclarationContext *ctx) {
+    // For declarations are typically simple variable declarations like "int i = 0"
+    // We'll reuse the declaration visitor logic
+    if (ctx->declarationSpecifiers() && ctx->initDeclaratorList()) {
+        // Get type
+        std::string type = extractTypeFromSpecifiers(ctx->declarationSpecifiers());
+        
+        // Get the first initDeclarator from the list (for now, only handle single declarations)
+        auto *initDeclList = ctx->initDeclaratorList();
+        if (initDeclList && !initDeclList->initDeclarator().empty()) {
+            auto *initDecl = initDeclList->initDeclarator(0);
+            if (initDecl && initDecl->declarator() && initDecl->declarator()->directDeclarator()) {
+                std::string name = extractIdentifierName(initDecl->declarator()->directDeclarator());
+                
+                // Handle initializer if present
+                ast::Expr* init = nullptr;
+                if (initDecl->initializer() && initDecl->initializer()->assignmentExpression()) {
+                    auto initResult = visit(initDecl->initializer()->assignmentExpression());
+                    init = std::any_cast<ast::Expr*>(initResult);
+                }
+                
+                // Create a variable declaration statement
+                auto varDecl = new ast::VarDecl(name, type, std::unique_ptr<ast::Expr>(init));
+                return std::any(static_cast<ast::Stmt*>(varDecl));
+            }
+        }
+    }
+    
+    return nullptr;
+}
+
+antlrcpp::Any ASTBuilder::visitForExpression(CParser::ForExpressionContext *ctx) {
+    // ForExpression can have multiple assignmentExpressions separated by commas
+    // For now, we'll just return the first one (or last one for comma operator semantics)
+    if (!ctx->assignmentExpression().empty()) {
+        // Return the last expression (comma operator semantics)
+        auto lastExpr = ctx->assignmentExpression().back();
+        return visit(lastExpr);
+    }
+    
     return nullptr;
 }
 

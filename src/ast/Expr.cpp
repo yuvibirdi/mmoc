@@ -28,6 +28,11 @@ std::string BinaryExpr::opToString() const {
         case OpKind::LeftShift: return "<<";
         case OpKind::RightShift: return ">>";
         case OpKind::Assign: return "=";
+        case OpKind::AddAssign: return "+=";
+        case OpKind::SubAssign: return "-=";
+        case OpKind::MulAssign: return "*=";
+        case OpKind::DivAssign: return "/=";
+        case OpKind::ModAssign: return "%=";
         default: return "?";
     }
 }

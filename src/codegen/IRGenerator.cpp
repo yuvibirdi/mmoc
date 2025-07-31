@@ -5,6 +5,7 @@
 #include "llvm/IR/GlobalVariable.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/TargetParser/Host.h"
 
 #include <iostream>
 #include <sstream>
@@ -15,6 +16,9 @@ IRGenerator::IRGenerator() {
     context_ = std::make_unique<llvm::LLVMContext>();
     module_ = std::make_unique<llvm::Module>("main", *context_);
     builder_ = std::make_unique<llvm::IRBuilder<>>(*context_);
+    
+    // Set target triple to avoid warnings during compilation
+    module_->setTargetTriple(llvm::sys::getDefaultTargetTriple());
 }
 
 std::string IRGenerator::generateIR(ast::TranslationUnit *tu) {
@@ -36,6 +40,14 @@ std::string IRGenerator::generateIR(ast::TranslationUnit *tu) {
 }
 
 void IRGenerator::visitTranslationUnit(ast::TranslationUnit *tu) {
+    // First pass: Create function declarations (signatures only)
+    for (const auto &decl : tu->declarations) {
+        if (auto *funcDecl = dynamic_cast<ast::FunctionDecl*>(decl.get())) {
+            createFunction(funcDecl->name, funcDecl->returnType, funcDecl->parameters);
+        }
+    }
+    
+    // Second pass: Generate function bodies and variable declarations
     for (const auto &decl : tu->declarations) {
         if (auto *funcDecl = dynamic_cast<ast::FunctionDecl*>(decl.get())) {
             visitFunctionDecl(funcDecl);
@@ -46,7 +58,12 @@ void IRGenerator::visitTranslationUnit(ast::TranslationUnit *tu) {
 }
 
 void IRGenerator::visitFunctionDecl(ast::FunctionDecl *func) {
-    llvm::Function *function = createFunction(func->name, func->returnType, func->parameters);
+    // Get the existing function declaration from first pass
+    llvm::Function *function = module_->getFunction(func->name);
+    if (!function) {
+        error("Function declaration not found: " + func->name);
+        return;
+    }
     
     if (func->isDefinition()) {
         currentFunction_ = function;
@@ -132,9 +149,10 @@ llvm::Value* IRGenerator::visitStmt(ast::Stmt *stmt) {
     } else if (auto *varDecl = dynamic_cast<ast::VarDecl*>(stmt)) {
         visitVarDecl(varDecl);
         return nullptr;
-    } else if (dynamic_cast<ast::BreakStmt*>(stmt) || dynamic_cast<ast::ContinueStmt*>(stmt)) {
-        // TODO: Implement break/continue with loop context
-        return nullptr;
+    } else if (auto *breakStmt = dynamic_cast<ast::BreakStmt*>(stmt)) {
+        return visitBreakStmt(breakStmt);
+    } else if (auto *continueStmt = dynamic_cast<ast::ContinueStmt*>(stmt)) {
+        return visitContinueStmt(continueStmt);
     }
     
     error("Unsupported statement type");
@@ -189,14 +207,20 @@ llvm::Value* IRGenerator::visitIfStmt(ast::IfStmt *stmt) {
     // Generate then block
     builder_->SetInsertPoint(thenBlock);
     visitStmt(stmt->thenStmt.get());
-    builder_->CreateBr(mergeBlock);
+    // Only add branch if the block is not already terminated
+    if (!thenBlock->getTerminator()) {
+        builder_->CreateBr(mergeBlock);
+    }
     
     // Generate else block if present
     if (elseBlock) {
         function->insert(function->end(), elseBlock);
         builder_->SetInsertPoint(elseBlock);
         visitStmt(stmt->elseStmt.get());
-        builder_->CreateBr(mergeBlock);
+        // Only add branch if the block is not already terminated
+        if (!elseBlock->getTerminator()) {
+            builder_->CreateBr(mergeBlock);
+        }
     }
     
     // Continue with merge block
@@ -212,6 +236,9 @@ llvm::Value* IRGenerator::visitWhileStmt(ast::WhileStmt *stmt) {
     llvm::BasicBlock *bodyBlock = llvm::BasicBlock::Create(*context_, "body", function);
     llvm::BasicBlock *afterBlock = llvm::BasicBlock::Create(*context_, "afterloop", function);
     
+    // Push loop context for break/continue
+    loopStack_.push_back({loopBlock, afterBlock}); // continue goes to loop condition, break goes to after
+    
     builder_->CreateBr(loopBlock);
     builder_->SetInsertPoint(loopBlock);
     
@@ -223,7 +250,13 @@ llvm::Value* IRGenerator::visitWhileStmt(ast::WhileStmt *stmt) {
     
     builder_->SetInsertPoint(bodyBlock);
     visitStmt(stmt->body.get());
-    builder_->CreateBr(loopBlock);
+    // Only add branch if the block is not already terminated (in case of break/continue)
+    if (!bodyBlock->getTerminator()) {
+        builder_->CreateBr(loopBlock);
+    }
+    
+    // Pop loop context
+    loopStack_.pop_back();
     
     builder_->SetInsertPoint(afterBlock);
     
@@ -231,8 +264,71 @@ llvm::Value* IRGenerator::visitWhileStmt(ast::WhileStmt *stmt) {
 }
 
 llvm::Value* IRGenerator::visitForStmt(ast::ForStmt *stmt) {
-    // TODO: Implement for loops
-    error("For loops not yet implemented");
+    // A for loop has four parts:
+    // 1. Initialization (executed once before the loop)
+    // 2. Condition (checked before each iteration)
+    // 3. Increment (executed after each iteration)
+    // 4. Body (the loop body)
+    
+    // Create basic blocks
+    llvm::Function *function = builder_->GetInsertBlock()->getParent();
+    llvm::BasicBlock *loopBlock = llvm::BasicBlock::Create(*context_, "for.loop", function);
+    llvm::BasicBlock *bodyBlock = llvm::BasicBlock::Create(*context_, "for.body", function);
+    llvm::BasicBlock *incrementBlock = llvm::BasicBlock::Create(*context_, "for.inc", function);
+    llvm::BasicBlock *afterBlock = llvm::BasicBlock::Create(*context_, "for.end", function);
+    
+    // Generate initialization code
+    if (stmt->init) {
+        visitStmt(stmt->init.get());
+    }
+    
+    // Push loop context for break/continue (continue goes to increment, break goes to after)
+    loopStack_.push_back({incrementBlock, afterBlock});
+    
+    // Jump to loop condition check
+    builder_->CreateBr(loopBlock);
+    
+    // Generate loop condition block
+    builder_->SetInsertPoint(loopBlock);
+    if (stmt->condition) {
+        llvm::Value *condValue = visitExpr(stmt->condition.get());
+        // Convert to boolean if needed
+        if (condValue->getType()->isIntegerTy() && condValue->getType()->getIntegerBitWidth() != 1) {
+            condValue = builder_->CreateICmpNE(condValue, 
+                llvm::ConstantInt::get(condValue->getType(), 0), "for.cond");
+        }
+        builder_->CreateCondBr(condValue, bodyBlock, afterBlock);
+    } else {
+        // No condition means infinite loop (until break)
+        builder_->CreateBr(bodyBlock);
+    }
+    
+    // Generate loop body
+    builder_->SetInsertPoint(bodyBlock);
+    if (stmt->body) {
+        visitStmt(stmt->body.get());
+    }
+    
+    // Only jump to increment if not already terminated (break/continue)
+    if (!bodyBlock->getTerminator()) {
+        builder_->CreateBr(incrementBlock);
+    }
+    
+    // Generate increment block
+    builder_->SetInsertPoint(incrementBlock);
+    if (stmt->increment) {
+        visitExpr(stmt->increment.get());
+    }
+    
+    // Jump back to condition check
+    builder_->CreateBr(loopBlock);
+    
+    // Pop loop context
+    loopStack_.pop_back();
+    
+    // Continue with code after the loop
+    builder_->SetInsertPoint(afterBlock);
+    
     return nullptr;
 }
 
@@ -311,18 +407,30 @@ llvm::Value* IRGenerator::visitBinaryExpr(ast::BinaryExpr *expr) {
             return builder_->CreateSDiv(left, right, "divtmp");
         case ast::BinaryExpr::OpKind::Mod:
             return builder_->CreateSRem(left, right, "modtmp");
-        case ast::BinaryExpr::OpKind::LT:
-            return builder_->CreateICmpSLT(left, right, "cmptmp");
-        case ast::BinaryExpr::OpKind::GT:
-            return builder_->CreateICmpSGT(left, right, "cmptmp");
-        case ast::BinaryExpr::OpKind::LE:
-            return builder_->CreateICmpSLE(left, right, "cmptmp");
-        case ast::BinaryExpr::OpKind::GE:
-            return builder_->CreateICmpSGE(left, right, "cmptmp");
-        case ast::BinaryExpr::OpKind::EQ:
-            return builder_->CreateICmpEQ(left, right, "cmptmp");
-        case ast::BinaryExpr::OpKind::NE:
-            return builder_->CreateICmpNE(left, right, "cmptmp");
+        case ast::BinaryExpr::OpKind::LT: {
+            llvm::Value *cmp = builder_->CreateICmpSLT(left, right, "cmptmp");
+            return builder_->CreateZExt(cmp, llvm::Type::getInt32Ty(*context_), "booltmp");
+        }
+        case ast::BinaryExpr::OpKind::GT: {
+            llvm::Value *cmp = builder_->CreateICmpSGT(left, right, "cmptmp");
+            return builder_->CreateZExt(cmp, llvm::Type::getInt32Ty(*context_), "booltmp");
+        }
+        case ast::BinaryExpr::OpKind::LE: {
+            llvm::Value *cmp = builder_->CreateICmpSLE(left, right, "cmptmp");
+            return builder_->CreateZExt(cmp, llvm::Type::getInt32Ty(*context_), "booltmp");
+        }
+        case ast::BinaryExpr::OpKind::GE: {
+            llvm::Value *cmp = builder_->CreateICmpSGE(left, right, "cmptmp");
+            return builder_->CreateZExt(cmp, llvm::Type::getInt32Ty(*context_), "booltmp");
+        }
+        case ast::BinaryExpr::OpKind::EQ: {
+            llvm::Value *cmp = builder_->CreateICmpEQ(left, right, "cmptmp");
+            return builder_->CreateZExt(cmp, llvm::Type::getInt32Ty(*context_), "booltmp");
+        }
+        case ast::BinaryExpr::OpKind::NE: {
+            llvm::Value *cmp = builder_->CreateICmpNE(left, right, "cmptmp");
+            return builder_->CreateZExt(cmp, llvm::Type::getInt32Ty(*context_), "booltmp");
+        }
         case ast::BinaryExpr::OpKind::LogicalAnd:
             return builder_->CreateAnd(left, right, "andtmp");
         case ast::BinaryExpr::OpKind::LogicalOr:
@@ -348,6 +456,14 @@ llvm::Value* IRGenerator::visitBinaryExpr(ast::BinaryExpr *expr) {
             }
             error("Invalid assignment target");
             return nullptr;
+        case ast::BinaryExpr::OpKind::AddAssign:
+        case ast::BinaryExpr::OpKind::SubAssign:
+        case ast::BinaryExpr::OpKind::MulAssign:
+        case ast::BinaryExpr::OpKind::DivAssign:
+        case ast::BinaryExpr::OpKind::ModAssign:
+            // TODO: Implement compound assignment operators
+            error("Compound assignment operators not yet implemented");
+            return nullptr;
         default:
             error("Unsupported binary operator");
             return nullptr;
@@ -369,6 +485,28 @@ llvm::Value* IRGenerator::visitUnaryExpr(ast::UnaryExpr *expr) {
             return builder_->CreateNot(operand, "nottmp");
         case ast::UnaryExpr::OpKind::BitwiseNot:
             return builder_->CreateNot(operand, "nottmp");
+        case ast::UnaryExpr::OpKind::AddressOf: {
+            // For address-of, we need the address of the operand
+            // This should only work on lvalue expressions (variables)
+            if (auto *id = dynamic_cast<ast::Identifier*>(expr->operand.get())) {
+                auto it = namedValues_.find(id->name);
+                if (it != namedValues_.end()) {
+                    // Return the alloca instruction itself (the address)
+                    return it->second;
+                }
+                error("Variable not found: " + id->name);
+                return nullptr;
+            }
+            error("Address-of operator requires an lvalue");
+            return nullptr;
+        }
+        case ast::UnaryExpr::OpKind::Dereference: {
+            // For dereference, operand should be a pointer, load from it
+            // In modern LLVM, we need to determine the element type from context
+            // For now, assume int pointers (most common case)
+            llvm::Type *elementType = llvm::Type::getInt32Ty(*context_);
+            return builder_->CreateLoad(elementType, operand, "deref");
+        }
         default:
             error("Unsupported unary operator");
             return nullptr;
@@ -376,12 +514,53 @@ llvm::Value* IRGenerator::visitUnaryExpr(ast::UnaryExpr *expr) {
 }
 
 llvm::Value* IRGenerator::visitCallExpr(ast::CallExpr *expr) {
-    // TODO: Implement function calls
-    error("Function calls not yet implemented");
-    return nullptr;
+    // Get the function being called
+    auto *funcExpr = expr->function.get();
+    
+    // For now, only handle direct function calls (identifier)
+    auto *identifier = dynamic_cast<ast::Identifier*>(funcExpr);
+    if (!identifier) {
+        error("Only direct function calls are supported");
+        return nullptr;
+    }
+    
+    std::string funcName = identifier->name;
+    
+    // Look up the function in the module
+    llvm::Function *function = module_->getFunction(funcName);
+    if (!function) {
+        error("Unknown function name: " + funcName);
+        return nullptr;
+    }
+    
+    // Generate arguments
+    std::vector<llvm::Value*> args;
+    for (auto &arg : expr->arguments) {
+        llvm::Value *argValue = visitExpr(arg.get());
+        if (!argValue) {
+            error("Failed to generate argument");
+            return nullptr;
+        }
+        args.push_back(argValue);
+    }
+    
+    // Check argument count
+    if (args.size() != function->arg_size()) {
+        error("Function call argument count mismatch");
+        return nullptr;
+    }
+    
+    // Create the function call
+    return builder_->CreateCall(function, args, "calltmp");
 }
 
 llvm::Type* IRGenerator::getLLVMType(const std::string &cType) {
+    // Handle pointer types
+    if (cType.back() == '*') {
+        // Modern LLVM uses opaque pointers, so we just return a pointer type
+        return llvm::PointerType::get(*context_, 0);
+    }
+    
     if (cType == "int") {
         return llvm::Type::getInt32Ty(*context_);
     } else if (cType == "char") {
@@ -413,6 +592,32 @@ llvm::Function* IRGenerator::createFunction(const std::string &name, const std::
     );
     
     return function;
+}
+
+llvm::Value* IRGenerator::visitBreakStmt(ast::BreakStmt *stmt) {
+    (void)stmt; // Suppress unused parameter warning
+    if (loopStack_.empty()) {
+        error("Break statement not within a loop");
+        return nullptr;
+    }
+    
+    // Jump to the break block of the innermost loop
+    builder_->CreateBr(loopStack_.back().breakBlock);
+    
+    return nullptr;
+}
+
+llvm::Value* IRGenerator::visitContinueStmt(ast::ContinueStmt *stmt) {
+    (void)stmt; // Suppress unused parameter warning
+    if (loopStack_.empty()) {
+        error("Continue statement not within a loop");
+        return nullptr;
+    }
+    
+    // Jump to the continue block of the innermost loop
+    builder_->CreateBr(loopStack_.back().continueBlock);
+    
+    return nullptr;
 }
 
 void IRGenerator::error(const std::string &message) {

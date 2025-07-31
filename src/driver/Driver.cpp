@@ -118,7 +118,7 @@ bool Driver::generateIR(ast::TranslationUnit *ast, const std::string &outputFile
 }
 
 bool Driver::compileToObject(const std::string &irFile, const std::string &objectFile) {
-    std::string command = "clang -c " + irFile + " -o " + objectFile;
+    std::string command = "clang -c -Wno-override-module " + irFile + " -o " + objectFile;
     log("Executing: " + command);
     
     int result = std::system(command.c_str());

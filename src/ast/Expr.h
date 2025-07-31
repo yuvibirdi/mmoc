@@ -87,7 +87,7 @@ struct BinaryExpr : public Expr {
         LogicalAnd, LogicalOr,
         BitwiseAnd, BitwiseOr, BitwiseXor,
         LeftShift, RightShift,
-        Assign
+        Assign, AddAssign, SubAssign, MulAssign, DivAssign, ModAssign
     };
     
     std::unique_ptr<Expr> left;
