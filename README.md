@@ -44,9 +44,12 @@ cmake --build build --target all -j
 ## Testing
 
 ```bash
-# Run unit tests
-ctest --test-dir build --output-on-failure
+# Run compiler test suite
+python3 tests/test_runner.py
 
-# Run integration tests
-./build/ccomp test/inputs/hello.c && ./a.out
+# Filter tests
+python3 tests/test_runner.py -f Pointers
+
+# Run CTest integration smoke test
+ctest --test-dir build --output-on-failure
 ```

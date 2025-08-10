@@ -122,27 +122,9 @@ target_link_libraries(ccomp PRIVATE ${LLVM_LIBS})
 # Enable testing
 enable_testing()
 
-# Find GoogleTest (if available)
-find_package(GTest QUIET)
-if(GTest_FOUND)
-    add_executable(tests
-        test/unit/test_lexer.cpp
-        test/unit/test_parser.cpp
-        test/unit/test_ast.cpp
-    )
-    target_link_libraries(tests PRIVATE 
-        cparser 
-        cast 
-        cutils
-        GTest::gtest 
-        GTest::gtest_main
-    )
-    add_test(NAME unit_tests COMMAND tests)
-endif()
-
-# Integration tests
+# Integration tests (keep minimal example if needed)
 add_test(
     NAME integration_hello_world
-    COMMAND ${CMAKE_COMMAND} -E env $<TARGET_FILE:ccomp> ${CMAKE_SOURCE_DIR}/test/inputs/hello.c
+    COMMAND ${CMAKE_COMMAND} -E env $<TARGET_FILE:ccomp> ${CMAKE_SOURCE_DIR}/tests/Basic/simple_return.c
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
 )
