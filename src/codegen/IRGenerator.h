@@ -37,6 +37,7 @@ private:
     
     // Symbol table for variables
     std::unordered_map<std::string, llvm::Value*> namedValues_;
+    std::unordered_map<std::string,int> pointerDepth_;
     
     // Current function being generated
     llvm::Function *currentFunction_ = nullptr;
@@ -72,11 +73,15 @@ private:
     llvm::Value* visitBinaryExpr(ast::BinaryExpr *expr);
     llvm::Value* visitUnaryExpr(ast::UnaryExpr *expr);
     llvm::Value* visitCallExpr(ast::CallExpr *expr);
+    llvm::Value* visitConditionalExpr(ast::ConditionalExpr *expr);
     
     // Helper methods
     llvm::Type* getLLVMType(const std::string &cType);
     llvm::Function* createFunction(const std::string &name, const std::string &returnType,
                                    const std::vector<std::pair<std::string, std::string>> &params);
+    llvm::Value* emitAddress(ast::Expr *expr);
+    int computePointerDepth(ast::Expr *expr);
+    llvm::Value* loadIdentifier(const std::string &name);
     
     // Error handling
     void error(const std::string &message);

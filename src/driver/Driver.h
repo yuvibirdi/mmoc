@@ -2,6 +2,7 @@
 
 #include <string>
 #include <memory>
+#include <vector>
 
 namespace ast {
     struct TranslationUnit;
@@ -34,9 +35,37 @@ public:
      */
     void setDebug(bool debug) { debug_ = debug; }
     
+    /**
+     * Set preprocessing-only mode (run preprocessor and exit).
+     */
+    void setPreprocessOnly(bool preprocessOnly) { preprocessOnly_ = preprocessOnly; }
+    
+    /**
+     * Add an include directory to the preprocessor search path.
+     */
+    void addIncludeDirectory(const std::string &dir);
+    
+    /**
+     * Add a macro definition to the preprocessor.
+     */
+    void addMacroDefinition(const std::string &macro);
+    
 private:
     bool verbose_ = false;
     bool debug_ = false;
+    bool preprocessOnly_ = false;
+    std::vector<std::string> includeDirs_;
+    std::vector<std::string> macroDefinitions_;
+    
+    /**
+     * Preprocess the input file.
+     */
+    std::string preprocessFile(const std::string &filename);
+    
+    /**
+     * Parse source code from string and build AST.
+     */
+    std::unique_ptr<ast::TranslationUnit> parseString(const std::string &source);
     
     /**
      * Parse the input file and build AST.

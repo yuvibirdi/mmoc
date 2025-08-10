@@ -87,7 +87,17 @@ void IRGenerator::visitFunctionDecl(ast::FunctionDecl *func) {
         
         // Generate function body
         visitCompoundStmt(func->body.get());
-        
+        // Ensure function is properly terminated
+        if (!function->getReturnType()->isVoidTy()) {
+            if (!builder_->GetInsertBlock()->getTerminator()) {
+                // Insert default return 0 for non-void functions
+                builder_->CreateRet(llvm::ConstantInt::get(function->getReturnType(), 0));
+            }
+        } else {
+            if (!builder_->GetInsertBlock()->getTerminator()) {
+                builder_->CreateRetVoid();
+            }
+        }
         // Verify function
         std::string error;
         llvm::raw_string_ostream errorStream(error);
@@ -101,12 +111,10 @@ void IRGenerator::visitFunctionDecl(ast::FunctionDecl *func) {
 
 void IRGenerator::visitVarDecl(ast::VarDecl *var) {
     llvm::Type *type = getLLVMType(var->type);
-    
+    int depth=0; for(char c: var->type) if(c=='*') depth++; pointerDepth_[var->name]=depth;
     if (currentFunction_) {
-        // Local variable
         llvm::AllocaInst *alloca = builder_->CreateAlloca(type, nullptr, var->name);
         namedValues_[var->name] = alloca;
-        
         if (var->initializer) {
             llvm::Value *initValue = visitExpr(var->initializer.get());
             builder_->CreateStore(initValue, alloca);
@@ -131,6 +139,22 @@ void IRGenerator::visitVarDecl(ast::VarDecl *var) {
         );
         namedValues_[var->name] = globalVar;
     }
+}
+
+int IRGenerator::computePointerDepth(ast::Expr *expr) {
+    if (auto *id = dynamic_cast<ast::Identifier*>(expr)) {
+        auto it = pointerDepth_.find(id->name); if(it!=pointerDepth_.end()) return it->second; return 0;
+    } else if (auto *un = dynamic_cast<ast::UnaryExpr*>(expr)) {
+        if (un->op == ast::UnaryExpr::OpKind::Dereference) {
+            // Dereference reduces depth by 1
+            int inner = computePointerDepth(un->operand.get());
+            return inner>0? inner-1 : 0;
+        } else if (un->op == ast::UnaryExpr::OpKind::AddressOf) {
+            int inner = computePointerDepth(un->operand.get());
+            return inner+1; // & increases depth
+        }
+    }
+    return 0;
 }
 
 llvm::Value* IRGenerator::visitStmt(ast::Stmt *stmt) {
@@ -187,46 +211,37 @@ llvm::Value* IRGenerator::visitReturnStmt(ast::ReturnStmt *stmt) {
 
 llvm::Value* IRGenerator::visitIfStmt(ast::IfStmt *stmt) {
     llvm::Value *condValue = visitExpr(stmt->condition.get());
-    
-    // Convert condition to boolean
-    condValue = builder_->CreateICmpNE(condValue, 
-        llvm::ConstantInt::get(*context_, llvm::APInt(32, 0)), "ifcond");
-    
+    // Normalize boolean sized integers
+    if (condValue->getType()->isIntegerTy(1)) {
+        // Already i1, use directly
+    } else if (condValue->getType()->isIntegerTy()) {
+        condValue = builder_->CreateICmpNE(condValue, llvm::ConstantInt::get(condValue->getType(), 0), "ifcondnorm");
+    }
+    // Convert condition to boolean (now condValue should be i1)
     llvm::Function *function = builder_->GetInsertBlock()->getParent();
     llvm::BasicBlock *thenBlock = llvm::BasicBlock::Create(*context_, "then", function);
-    llvm::BasicBlock *elseBlock = stmt->elseStmt ? 
-        llvm::BasicBlock::Create(*context_, "else") : nullptr;
+    llvm::BasicBlock *elseBlock = stmt->elseStmt ? llvm::BasicBlock::Create(*context_, "else") : nullptr;
     llvm::BasicBlock *mergeBlock = llvm::BasicBlock::Create(*context_, "ifcont");
-    
     if (elseBlock) {
         builder_->CreateCondBr(condValue, thenBlock, elseBlock);
     } else {
         builder_->CreateCondBr(condValue, thenBlock, mergeBlock);
     }
-    
-    // Generate then block
     builder_->SetInsertPoint(thenBlock);
     visitStmt(stmt->thenStmt.get());
-    // Only add branch if the block is not already terminated
     if (!thenBlock->getTerminator()) {
         builder_->CreateBr(mergeBlock);
     }
-    
-    // Generate else block if present
     if (elseBlock) {
         function->insert(function->end(), elseBlock);
         builder_->SetInsertPoint(elseBlock);
         visitStmt(stmt->elseStmt.get());
-        // Only add branch if the block is not already terminated
         if (!elseBlock->getTerminator()) {
             builder_->CreateBr(mergeBlock);
         }
     }
-    
-    // Continue with merge block
     function->insert(function->end(), mergeBlock);
     builder_->SetInsertPoint(mergeBlock);
-    
     return nullptr;
 }
 
@@ -349,6 +364,8 @@ llvm::Value* IRGenerator::visitExpr(ast::Expr *expr) {
         return visitUnaryExpr(unaryExpr);
     } else if (auto *callExpr = dynamic_cast<ast::CallExpr*>(expr)) {
         return visitCallExpr(callExpr);
+    } else if (auto *condExpr = dynamic_cast<ast::ConditionalExpr*>(expr)) {
+        return visitConditionalExpr(condExpr);
     }
     
     error("Unsupported expression type");
@@ -372,30 +389,92 @@ llvm::Value* IRGenerator::visitStringLiteral(ast::StringLiteral *lit) {
 }
 
 llvm::Value* IRGenerator::visitIdentifier(ast::Identifier *id) {
-    llvm::Value *value = namedValues_[id->name];
-    if (!value) {
-        error("Unknown variable name: " + id->name);
-        return nullptr;
+    llvm::Value *ptr = namedValues_[id->name];
+    if(!ptr) { error("Unknown variable name: "+id->name); return nullptr; }
+    if (auto *ai = llvm::dyn_cast<llvm::AllocaInst>(ptr)) {
+        return builder_->CreateLoad(ai->getAllocatedType(), ptr, id->name);
     }
-    
-    // If it's an alloca (local variable), load its value
-    if (llvm::isa<llvm::AllocaInst>(value)) {
-        // For LLVM 20+, we need to explicitly cast to get the element type
-        auto allocaInst = llvm::cast<llvm::AllocaInst>(value);
-        return builder_->CreateLoad(allocaInst->getAllocatedType(), value, id->name);
+    return ptr;
+}
+
+llvm::Value* IRGenerator::emitAddress(ast::Expr *expr) {
+    if (auto *id = dynamic_cast<ast::Identifier*>(expr)) {
+        auto it = namedValues_.find(id->name);
+        if (it!=namedValues_.end()) return it->second;
+        error("Unknown variable name: "+id->name); return nullptr;
+    } else if (auto *un = dynamic_cast<ast::UnaryExpr*>(expr)) {
+        if (un->op == ast::UnaryExpr::OpKind::Dereference) {
+            // Address of *E is the value of E (a pointer)
+            llvm::Value *v = visitExpr(un->operand.get());
+            if(!v || !v->getType()->isPointerTy()) { error("Dereference of non-pointer type"); return nullptr; }
+            return v;
+        }
     }
-    
-    return value;
+    error("Not an lvalue expression"); return nullptr;
+}
+llvm::Value* IRGenerator::loadIdentifier(const std::string &name) {
+    auto it = namedValues_.find(name); if(it==namedValues_.end()) return nullptr;
+    llvm::Value *allocaPtr = it->second;
+    if (auto *ai = llvm::dyn_cast<llvm::AllocaInst>(allocaPtr)) {
+        return builder_->CreateLoad(ai->getAllocatedType(), allocaPtr, name);
+    }
+    return allocaPtr;
+}
+
+llvm::Value* IRGenerator::visitUnaryExpr(ast::UnaryExpr *expr) {
+    switch (expr->op) {
+        case ast::UnaryExpr::OpKind::AddressOf: {
+            return emitAddress(expr->operand.get());
+        }
+        case ast::UnaryExpr::OpKind::Dereference: {
+            int operandDepth = computePointerDepth(expr->operand.get());
+            if (operandDepth == 0) { error("Dereference of non-pointer type"); return nullptr; }
+            int resultDepth = operandDepth - 1;
+            llvm::Value *operandVal = emitAddress(expr->operand.get()); // get the address (pointer) we will dereference
+            if (!operandVal || !operandVal->getType()->isPointerTy()) { error("Dereference of non-pointer type"); return nullptr; }
+            if (resultDepth > 0) {
+                // Result is still a pointer after one level deref
+                llvm::Type *ptrTy = llvm::PointerType::get(*context_, 0);
+                return builder_->CreateLoad(ptrTy, operandVal, "derefptr");
+            } else {
+                // Final object assumed int for now
+                llvm::Type *intTy = llvm::Type::getInt32Ty(*context_);
+                return builder_->CreateLoad(intTy, operandVal, "derefval");
+            }
+        }
+        case ast::UnaryExpr::OpKind::Plus: {
+            llvm::Value *v = visitExpr(expr->operand.get());
+            return v;
+        }
+        case ast::UnaryExpr::OpKind::Minus: {
+            llvm::Value *v = visitExpr(expr->operand.get());
+            return builder_->CreateNeg(v, "negtmp");
+        }
+        case ast::UnaryExpr::OpKind::Not: {
+            llvm::Value *v = visitExpr(expr->operand.get());
+            return builder_->CreateNot(v, "nottmp");
+        }
+        case ast::UnaryExpr::OpKind::BitwiseNot: {
+            llvm::Value *v = visitExpr(expr->operand.get());
+            return builder_->CreateNot(v, "nottmp");
+        }
+        default:
+            error("Unsupported unary operator");
+            return nullptr;
+    }
 }
 
 llvm::Value* IRGenerator::visitBinaryExpr(ast::BinaryExpr *expr) {
+    if (expr->op == ast::BinaryExpr::OpKind::Assign) {
+        llvm::Value *rhs = visitExpr(expr->right.get());
+        llvm::Value *lhsAddr = emitAddress(expr->left.get());
+        if(!lhsAddr) return nullptr;
+        builder_->CreateStore(rhs, lhsAddr);
+        return rhs;
+    }
     llvm::Value *left = visitExpr(expr->left.get());
     llvm::Value *right = visitExpr(expr->right.get());
-    
-    if (!left || !right) {
-        return nullptr;
-    }
-    
+    if(!left || !right) return nullptr;
     switch (expr->op) {
         case ast::BinaryExpr::OpKind::Add:
             return builder_->CreateAdd(left, right, "addtmp");
@@ -445,70 +524,15 @@ llvm::Value* IRGenerator::visitBinaryExpr(ast::BinaryExpr *expr) {
             return builder_->CreateShl(left, right, "shltmp");
         case ast::BinaryExpr::OpKind::RightShift:
             return builder_->CreateAShr(left, right, "shrtmp");
-        case ast::BinaryExpr::OpKind::Assign:
-            // Assignment: left should be an lvalue
-            if (auto *id = dynamic_cast<ast::Identifier*>(expr->left.get())) {
-                llvm::Value *var = namedValues_[id->name];
-                if (var && llvm::isa<llvm::AllocaInst>(var)) {
-                    builder_->CreateStore(right, var);
-                    return right;
-                }
-            }
-            error("Invalid assignment target");
-            return nullptr;
         case ast::BinaryExpr::OpKind::AddAssign:
         case ast::BinaryExpr::OpKind::SubAssign:
         case ast::BinaryExpr::OpKind::MulAssign:
         case ast::BinaryExpr::OpKind::DivAssign:
         case ast::BinaryExpr::OpKind::ModAssign:
-            // TODO: Implement compound assignment operators
             error("Compound assignment operators not yet implemented");
             return nullptr;
         default:
             error("Unsupported binary operator");
-            return nullptr;
-    }
-}
-
-llvm::Value* IRGenerator::visitUnaryExpr(ast::UnaryExpr *expr) {
-    llvm::Value *operand = visitExpr(expr->operand.get());
-    if (!operand) {
-        return nullptr;
-    }
-    
-    switch (expr->op) {
-        case ast::UnaryExpr::OpKind::Plus:
-            return operand; // Unary plus is a no-op
-        case ast::UnaryExpr::OpKind::Minus:
-            return builder_->CreateNeg(operand, "negtmp");
-        case ast::UnaryExpr::OpKind::Not:
-            return builder_->CreateNot(operand, "nottmp");
-        case ast::UnaryExpr::OpKind::BitwiseNot:
-            return builder_->CreateNot(operand, "nottmp");
-        case ast::UnaryExpr::OpKind::AddressOf: {
-            // For address-of, we need the address of the operand
-            // This should only work on lvalue expressions (variables)
-            if (auto *id = dynamic_cast<ast::Identifier*>(expr->operand.get())) {
-                auto it = namedValues_.find(id->name);
-                if (it != namedValues_.end()) {
-                    // Return the alloca instruction itself (the address)
-                    return it->second;
-                }
-                error("Variable not found: " + id->name);
-                return nullptr;
-            }
-            error("Address-of operator requires an lvalue");
-            return nullptr;
-        }
-        case ast::UnaryExpr::OpKind::Dereference: {
-            // For dereference, operand should be a pointer, load from it
-            // In modern LLVM, we need to determine the element type from context
-            // For now, assume int pointers (most common case)
-            llvm::Type *elementType = llvm::Type::getInt32Ty(*context_);
-            return builder_->CreateLoad(elementType, operand, "deref");
-        }
-        default:
-            error("Unsupported unary operator");
             return nullptr;
     }
 }
@@ -554,6 +578,65 @@ llvm::Value* IRGenerator::visitCallExpr(ast::CallExpr *expr) {
     return builder_->CreateCall(function, args, "calltmp");
 }
 
+llvm::Value* IRGenerator::visitConditionalExpr(ast::ConditionalExpr *expr) {
+    // Generate condition
+    llvm::Value *condValue = visitExpr(expr->condition.get());
+    if (!condValue) {
+        error("Failed to generate condition for ternary operator");
+        return nullptr;
+    }
+    
+    // Convert condition to boolean
+    condValue = builder_->CreateICmpNE(condValue, 
+        llvm::ConstantInt::get(*context_, llvm::APInt(32, 0)), "condtmp");
+    
+    // Get current function
+    llvm::Function *function = currentFunction_;
+    if (!function) {
+        error("Ternary operator outside function");
+        return nullptr;
+    }
+    
+    // Create basic blocks
+    llvm::BasicBlock *thenBlock = llvm::BasicBlock::Create(*context_, "then", function);
+    llvm::BasicBlock *elseBlock = llvm::BasicBlock::Create(*context_, "else");
+    llvm::BasicBlock *mergeBlock = llvm::BasicBlock::Create(*context_, "ifcont");
+    
+    // Branch based on condition
+    builder_->CreateCondBr(condValue, thenBlock, elseBlock);
+    
+    // Generate true expression
+    builder_->SetInsertPoint(thenBlock);
+    llvm::Value *thenValue = visitExpr(expr->trueExpr.get());
+    if (!thenValue) {
+        error("Failed to generate true expression for ternary operator");
+        return nullptr;
+    }
+    builder_->CreateBr(mergeBlock);
+    thenBlock = builder_->GetInsertBlock(); // Update in case of nested expressions
+    
+    // Generate false expression
+    function->insert(function->end(), elseBlock);
+    builder_->SetInsertPoint(elseBlock);
+    llvm::Value *elseValue = visitExpr(expr->falseExpr.get());
+    if (!elseValue) {
+        error("Failed to generate false expression for ternary operator");
+        return nullptr;
+    }
+    builder_->CreateBr(mergeBlock);
+    elseBlock = builder_->GetInsertBlock(); // Update in case of nested expressions
+    
+    // Merge block with PHI node
+    function->insert(function->end(), mergeBlock);
+    builder_->SetInsertPoint(mergeBlock);
+    
+    llvm::PHINode *phi = builder_->CreatePHI(thenValue->getType(), 2, "iftmp");
+    phi->addIncoming(thenValue, thenBlock);
+    phi->addIncoming(elseValue, elseBlock);
+    
+    return phi;
+}
+
 llvm::Type* IRGenerator::getLLVMType(const std::string &cType) {
     // Handle pointer types
     if (cType.back() == '*') {
@@ -569,6 +652,8 @@ llvm::Type* IRGenerator::getLLVMType(const std::string &cType) {
         return llvm::Type::getFloatTy(*context_);
     } else if (cType == "double") {
         return llvm::Type::getDoubleTy(*context_);
+    } else if (cType == "_Bool") {
+        return llvm::Type::getInt1Ty(*context_);  // C11 _Bool type
     } else if (cType == "void") {
         return llvm::Type::getVoidTy(*context_);
     } else {

@@ -171,4 +171,20 @@ struct MemberExpr : public Expr {
     }
 };
 
+/**
+ * Ternary conditional expression (e.g., condition ? true_expr : false_expr).
+ */
+struct ConditionalExpr : public Expr {
+    std::unique_ptr<Expr> condition;
+    std::unique_ptr<Expr> trueExpr;
+    std::unique_ptr<Expr> falseExpr;
+    
+    ConditionalExpr(std::unique_ptr<Expr> cond, std::unique_ptr<Expr> trueE, std::unique_ptr<Expr> falseE)
+        : condition(std::move(cond)), trueExpr(std::move(trueE)), falseExpr(std::move(falseE)) {}
+    
+    std::string toString() const override {
+        return condition->toString() + " ? " + trueExpr->toString() + " : " + falseExpr->toString();
+    }
+};
+
 } // namespace ast

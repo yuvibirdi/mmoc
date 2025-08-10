@@ -168,8 +168,25 @@ antlrcpp::Any ASTBuilder::visitAssignmentExpression(CParser::AssignmentExpressio
 }
 
 antlrcpp::Any ASTBuilder::visitConditionalExpression(CParser::ConditionalExpressionContext *ctx) {
-    // TODO: Implement ternary operator when needed
-    return visit(ctx->logicalOrExpression());
+    // Handle ternary operator: condition ? true_expr : false_expr
+    auto conditionResult = visit(ctx->logicalOrExpression());
+    auto condition = std::unique_ptr<ast::Expr>(std::any_cast<ast::Expr*>(conditionResult));
+    
+    // Check if this is actually a ternary expression
+    if (ctx->expression() && ctx->conditionalExpression()) {
+        // This is a ternary expression
+        auto trueResult = visit(ctx->expression());
+        auto trueExpr = std::unique_ptr<ast::Expr>(std::any_cast<ast::Expr*>(trueResult));
+        
+        auto falseResult = visit(ctx->conditionalExpression());
+        auto falseExpr = std::unique_ptr<ast::Expr>(std::any_cast<ast::Expr*>(falseResult));
+        
+        return std::any(static_cast<ast::Expr*>(new ast::ConditionalExpr(
+            std::move(condition), std::move(trueExpr), std::move(falseExpr))));
+    } else {
+        // Just a regular logical OR expression
+        return std::any(condition.release());
+    }
 }
 
 antlrcpp::Any ASTBuilder::visitLogicalOrExpression(CParser::LogicalOrExpressionContext *ctx) {
@@ -569,10 +586,23 @@ std::unique_ptr<ast::Expr> ASTBuilder::extractExpr(const antlrcpp::Any &result) 
 std::unique_ptr<ast::Stmt> ASTBuilder::extractStmt(const antlrcpp::Any &result) {
     try {
         auto *ptr = std::any_cast<ast::Stmt*>(result);
-        return std::unique_ptr<ast::Stmt>(ptr);
+        if (ptr) return std::unique_ptr<ast::Stmt>(ptr);
     } catch (const std::bad_any_cast&) {
-        return nullptr;
+        // fallthrough to try derived types
     }
+    try {
+        auto *ptr = std::any_cast<ast::CompoundStmt*>(result);
+        if (ptr) return std::unique_ptr<ast::Stmt>(ptr);
+    } catch (const std::bad_any_cast&) {
+        // ignore
+    }
+    try {
+        auto *ptr = std::any_cast<ast::VarDecl*>(result);
+        if (ptr) return std::unique_ptr<ast::Stmt>(ptr);
+    } catch (const std::bad_any_cast&) {
+        // ignore
+    }
+    return nullptr;
 }
 
 // Missing method implementations (stubs for now)

@@ -78,6 +78,12 @@ add_library(csema STATIC
 target_include_directories(csema PUBLIC src)
 target_link_libraries(csema PUBLIC cast)
 
+# Preprocessor library
+add_library(cpreprocessor STATIC
+    src/preprocessor/Preprocessor.cpp
+)
+target_include_directories(cpreprocessor PUBLIC src)
+
 # Code generation library
 add_library(ccodegen STATIC
     src/codegen/IRGenerator.cpp
@@ -107,6 +113,7 @@ target_link_libraries(ccomp PRIVATE
     cparser 
     csema 
     ccodegen 
+    cpreprocessor
     cutils
 )
 # Link LLVM libraries separately to avoid duplicates

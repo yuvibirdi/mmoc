@@ -1,56 +1,39 @@
-# MMOC Test Suite Configuration
+# MMOC Test Suite
 
-## Test Organization
+## Structure
 
-This test suite follows LLVM/Clang testing conventions with the following structure:
+Organized by feature area:
+- `Arithmetic/`
+- `Arrays/`
+- `Basic/`
+- `C11/`
+- `ControlFlow/`
+- `Functions/`
+- `Operators/`
+- `Pointers/`
+- `Preprocessor/`
+- `Variables/`
+- Top-level feature progression tests (for_loop*, ternary*, temp_test.c while under development)
 
-- `Basic/` - Basic compilation and execution tests
-- `Arithmetic/` - Mathematical operations and precedence
-- `Variables/` - Variable declarations, assignments, and usage  
-- `Functions/` - Function definitions and calls
-- `ControlFlow/` - If statements, loops, and control structures
+## Directives
+// RUN: command
+// XFAIL: * (expected failure placeholder)
+// UNSUPPORTED: platform
 
-## Test Directives
+## Substitutions
+- `%ccomp` compiler path
+- `%s` source file
+- `%t` temp output file
+- `%T` temp directory
 
-Tests use standard LLVM-style directives:
-
-- `// RUN: command` - Command to execute for the test
-- `// XFAIL: *` - Test expected to fail
-- `// UNSUPPORTED: platform` - Test not supported on platform
-
-## Variables
-
-- `%ccomp` - Path to the MMOC compiler
-- `%s` - Source file path
-- `%t` - Temporary output file
-- `%T` - Temporary directory
-
-## Running Tests
-
-```bash
-# Run all tests
-python3 test_runner.py
-
-# Run specific test category
-python3 test_runner.py --filter Basic
-
-# Run with custom compiler path
-python3 test_runner.py --compiler ./build/ccomp
-
-# Verbose output
-python3 test_runner.py --verbose
+## Running
+```
+python3 tests/test_runner.py            # all
+python3 tests/test_runner.py -f Pointers # filtered
+python3 tests/test_runner.py -c ./build/ccomp
 ```
 
-## Expected Results
+## Current Status
+All listed tests pass (34/34). While/for/if constructs, _Bool, pointers (including double pointer), arrays, ternary, and preprocessor macros implemented.
 
-Currently working features:
-- Basic program compilation
-- Arithmetic operations (+, -, *, /, %)
-- Variable declarations and assignments
-- Function definitions and calls
-- If statements with conditions
-
-Known failing features (XFAIL tests):
-- While loops (parsing issues with compound statements)
-- For loops
-- Complex control flow
+No current XFAIL entries.

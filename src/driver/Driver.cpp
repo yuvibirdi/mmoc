@@ -1,6 +1,7 @@
 #include "driver/Driver.h"
 #include "parser/ASTBuilder.h"
 #include "codegen/IRGenerator.h"
+#include "preprocessor/Preprocessor.h"
 #include "utils/Error.h"
 #include "ast/Stmt.h"
 
@@ -19,8 +20,26 @@ int Driver::compile(const std::string &inputFile, const std::string &outputFile)
     try {
         log("Compiling " + inputFile + " to " + outputFile);
         
-        // Parse the input file
-        auto ast = parseFile(inputFile);
+        // Preprocess the input file
+        std::string preprocessedSource = preprocessFile(inputFile);
+        
+        if (preprocessOnly_) {
+            // Output preprocessed source and exit
+            if (outputFile != "a.out") {
+                std::ofstream file(outputFile);
+                if (!file) {
+                    std::cerr << "Error: Cannot write to output file: " << outputFile << std::endl;
+                    return 1;
+                }
+                file << preprocessedSource;
+            } else {
+                std::cout << preprocessedSource;
+            }
+            return 0;
+        }
+        
+        // Parse the preprocessed source
+        auto ast = parseString(preprocessedSource);
         if (!ast) {
             std::cerr << "Error: Failed to parse " << inputFile << std::endl;
             return 1;
@@ -64,6 +83,56 @@ int Driver::compile(const std::string &inputFile, const std::string &outputFile)
         std::cerr << "Error: " << e.what() << std::endl;
         return 1;
     }
+}
+
+void Driver::addIncludeDirectory(const std::string &dir) {
+    includeDirs_.push_back(dir);
+}
+
+void Driver::addMacroDefinition(const std::string &macro) {
+    macroDefinitions_.push_back(macro);
+}
+
+std::string Driver::preprocessFile(const std::string &filename) {
+    log("Preprocessing " + filename);
+    
+    preprocessor::Preprocessor preprocessor;
+    preprocessor.setVerbose(verbose_);
+    
+    // Add include directories
+    for (const auto &dir : includeDirs_) {
+        preprocessor.addIncludeDirectory(dir);
+    }
+    
+    // Add macro definitions
+    for (const auto &macro : macroDefinitions_) {
+        preprocessor.addMacroDefinition(macro);
+    }
+    
+    return preprocessor.preprocess(filename);
+}
+
+std::unique_ptr<ast::TranslationUnit> Driver::parseString(const std::string &source) {
+    // Create ANTLR input stream
+    antlr4::ANTLRInputStream input(source);
+    
+    // Create lexer
+    CLexer lexer(&input);
+    antlr4::CommonTokenStream tokens(&lexer);
+    
+    // Create parser
+    CParser parser(&tokens);
+    
+    // Parse the translation unit
+    auto *tree = parser.translationUnit();
+    
+    // Build AST
+    parser::ASTBuilder builder;
+    auto result = builder.visit(tree);
+    
+    // Convert raw pointer back to unique_ptr
+    auto *translation_unit_ptr = std::any_cast<ast::TranslationUnit*>(result);
+    return std::unique_ptr<ast::TranslationUnit>(translation_unit_ptr);
 }
 
 std::unique_ptr<ast::TranslationUnit> Driver::parseFile(const std::string &filename) {

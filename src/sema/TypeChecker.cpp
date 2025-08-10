@@ -159,7 +159,7 @@ bool TypeChecker::areTypesCompatible(const std::string &type1, const std::string
     }
     
     // Allow implicit conversions between numeric types
-    std::vector<std::string> numericTypes = {"int", "char", "float", "double"};
+    std::vector<std::string> numericTypes = {"int", "char", "float", "double", "_Bool"};
     auto isNumeric = [&](const std::string &type) {
         return std::find(numericTypes.begin(), numericTypes.end(), type) != numericTypes.end();
     };
