@@ -6,104 +6,89 @@ on:
   pull_request:
     branches: [ main ]
 
+env:
+  ANTLR_VERSION: 4.13.2
+
 jobs:
   build:
+    name: Build & Test (${ { matrix.os } } / ${ { matrix.build_type } })
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
         build_type: [Release, Debug]
-    
     runs-on: ${{ matrix.os }}
-    
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Setup CMake
-      uses: lukka/get-cmake@latest
-    
-    - name: Install dependencies (Ubuntu)
-      if: runner.os == 'Linux'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          llvm-17 \
-          llvm-17-dev \
-          clang-17 \
-          lld-17 \
-          libantlr4-runtime-dev \
-          antlr4 \
-          openjdk-17-jre-headless \
-          pkg-config \
-          ninja-build \
-          cppcheck curl
-        sudo ln -sf /usr/bin/llvm-config-17 /usr/bin/llvm-config
-        sudo ln -sf /usr/bin/clang-17 /usr/bin/clang
-        sudo ln -sf /usr/bin/clang++-17 /usr/bin/clang++
-    
-    - name: Install dependencies (macOS)
-      if: runner.os == 'macOS'
-      run: |
-        brew install \
-          llvm \
-          antlr \
-          antlr4-cpp-runtime \
-          openjdk \
-          ninja \
-          cppcheck \
-          curl \
-          pkg-config
-        echo "$(brew --prefix llvm)/bin" >> $GITHUB_PATH
-    
-    - name: Setup ANTLR tool (all platforms)
-      run: |
-        set -e
-        ANTLR_VERSION=4.13.2
-        JAR_URL="https://www.antlr.org/download/antlr-${ANTLR_VERSION}-complete.jar"
-        mkdir -p "$HOME/.local/lib/antlr" "$HOME/.local/bin"
-        curl -L "$JAR_URL" -o "$HOME/.local/lib/antlr/antlr.jar"
-        cat > "$HOME/.local/bin/antlr" <<'EOF'
+      - uses: actions/checkout@v4
+
+      - name: Setup CMake
+        uses: lukka/get-cmake@latest
+
+      - name: Install dependencies (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            llvm-17 llvm-17-dev clang-17 lld-17 \
+            libantlr4-runtime-dev antlr4 openjdk-17-jre-headless \
+            pkg-config ninja-build cppcheck curl
+          sudo ln -sf /usr/bin/llvm-config-17 /usr/bin/llvm-config
+          sudo ln -sf /usr/bin/clang-17 /usr/bin/clang
+          sudo ln -sf /usr/bin/clang++-17 /usr/bin/clang++
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install llvm antlr antlr4-cpp-runtime openjdk ninja cppcheck curl pkg-config
+          echo "$(brew --prefix llvm)/bin" >> $GITHUB_PATH
+
+      - name: Setup ANTLR tool (all platforms)
+        run: |
+          set -e
+          JAR_URL="https://www.antlr.org/download/antlr-${ANTLR_VERSION}-complete.jar"
+          mkdir -p "$HOME/.local/lib/antlr" "$HOME/.local/bin"
+          curl -sSL "$JAR_URL" -o "$HOME/.local/lib/antlr/antlr.jar"
+          cat > "$HOME/.local/bin/antlr" <<'EOF'
 #!/usr/bin/env bash
 java -jar "$HOME/.local/lib/antlr/antlr.jar" "$@"
 EOF
-        chmod +x "$HOME/.local/bin/antlr"
-        echo "$HOME/.local/bin" >> $GITHUB_PATH
-        antlr -version
-    
-    - name: Cache ANTLR generated files
-      uses: actions/cache@v3
-      with:
-        path: generated/
-        key: antlr-${{ hashFiles('grammar/C.g4') }}
-    
-    - name: Configure CMake
-      run: |
-        cmake -B build \
-          -G Ninja \
-          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
-          -DCMAKE_C_COMPILER=clang \
-          -DCMAKE_CXX_COMPILER=clang++
-    
-    - name: Build
-      run: cmake --build build --target all -j
-    
-    - name: Run static analysis
-      if: matrix.build_type == 'Debug'
-      run: |
-        cppcheck --enable=all --error-exitcode=1 --suppress=missingIncludeSystem src/
-    
-    - name: Run tests
-      run: ctest --test-dir build --output-on-failure -j
-    
-    - name: Upload build artifacts
-      if: failure()
-      uses: actions/upload-artifact@v4
-      with:
-        name: build-logs-${{ matrix.os }}-${{ matrix.build_type }}
-        path: |
-          build/CMakeFiles/CMakeOutput.log
-          build/CMakeFiles/CMakeError.log
-    - name: Run python test suite
-      run: python3 tests/test_runner.py
+          chmod +x "$HOME/.local/bin/antlr"
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          antlr -version
+
+      - name: Cache generated parser
+        uses: actions/cache@v4
+        with:
+          path: generated/
+          key: antlr-${{ hashFiles('grammar/C.g4') }}
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++
+
+      - name: Build
+        run: cmake --build build --target all -j
+
+      - name: Run static analysis (cppcheck)
+        if: matrix.build_type == 'Debug'
+        run: cppcheck --enable=all --error-exitcode=1 --suppress=missingIncludeSystem src/
+
+      - name: CTest
+        run: ctest --test-dir build --output-on-failure -j
+
+      - name: Python test suite
+        run: python3 tests/test_runner.py
+
+      - name: Upload build logs (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs-${{ matrix.os }}-${{ matrix.build_type }}
+          path: |
+            build/CMakeFiles/CMakeOutput.log
+            build/CMakeFiles/CMakeError.log
 
   arch:
     name: Arch Linux Build
@@ -111,17 +96,14 @@ EOF
     container: archlinux:latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Install deps (Arch)
         run: |
           pacman -Sy --noconfirm --needed base-devel llvm clang lld cmake ninja python git cppcheck curl jre-openjdk
-          if ! pacman -Qi antlr4-runtime &>/dev/null; then
-            pacman -S --noconfirm antlr4-runtime || true
-          fi
-          # Download ANTLR jar (tool) uniformly
-          ANTLR_VERSION=4.13.2
+          pacman -S --noconfirm antlr4-runtime || true
           JAR_URL="https://www.antlr.org/download/antlr-${ANTLR_VERSION}-complete.jar"
           mkdir -p /root/.local/lib/antlr /root/.local/bin
-          curl -L "$JAR_URL" -o /root/.local/lib/antlr/antlr.jar
+          curl -sSL "$JAR_URL" -o /root/.local/lib/antlr/antlr.jar
           cat > /root/.local/bin/antlr <<'EOF'
 #!/usr/bin/env bash
 java -jar /root/.local/lib/antlr/antlr.jar "$@"
@@ -129,12 +111,15 @@ EOF
           chmod +x /root/.local/bin/antlr
           echo "/root/.local/bin" >> $GITHUB_PATH
           antlr -version
+
       - name: Configure
         env:
           ANTLR4_INCLUDE: /usr/include/antlr4-runtime
           ANTLR4_LIB: /usr/lib
         run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
       - name: Build
         run: cmake --build build --target all -j
+
       - name: Tests
         run: python tests/test_runner.py
