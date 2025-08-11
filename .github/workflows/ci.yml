@@ -88,3 +88,21 @@ jobs:
         path: |
           build/CMakeFiles/CMakeOutput.log
           build/CMakeFiles/CMakeError.log
+    - name: Run python test suite
+      run: python3 tests/test_runner.py
+
+  arch:
+    name: Arch Linux Build
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install deps (Arch)
+        run: |
+          pacman -Sy --noconfirm --needed base-devel llvm clang lld cmake ninja python antlr4-runtime cppcheck git
+      - name: Configure
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build --target all -j
+      - name: Tests
+        run: python tests/test_runner.py

@@ -390,7 +390,13 @@ llvm::Value* IRGenerator::visitStringLiteral(ast::StringLiteral *lit) {
 
 llvm::Value* IRGenerator::visitIdentifier(ast::Identifier *id) {
     llvm::Value *ptr = namedValues_[id->name];
-    if(!ptr) { error("Unknown variable name: "+id->name); return nullptr; }
+    if(!ptr) {
+        // Fallback: treat identifier as function symbol
+        if (auto *fn = module_->getFunction(id->name)) {
+            return fn; // function pointer usable for direct call via CallExpr elsewhere
+        }
+        error("Unknown variable name: "+id->name); return nullptr;
+    }
     if (auto *ai = llvm::dyn_cast<llvm::AllocaInst>(ptr)) {
         return builder_->CreateLoad(ai->getAllocatedType(), ptr, id->name);
     }
@@ -430,17 +436,32 @@ llvm::Value* IRGenerator::visitUnaryExpr(ast::UnaryExpr *expr) {
             int operandDepth = computePointerDepth(expr->operand.get());
             if (operandDepth == 0) { error("Dereference of non-pointer type"); return nullptr; }
             int resultDepth = operandDepth - 1;
-            llvm::Value *operandVal = emitAddress(expr->operand.get()); // get the address (pointer) we will dereference
+            llvm::Value *operandVal = emitAddress(expr->operand.get());
             if (!operandVal || !operandVal->getType()->isPointerTy()) { error("Dereference of non-pointer type"); return nullptr; }
             if (resultDepth > 0) {
-                // Result is still a pointer after one level deref
                 llvm::Type *ptrTy = llvm::PointerType::get(*context_, 0);
                 return builder_->CreateLoad(ptrTy, operandVal, "derefptr");
             } else {
-                // Final object assumed int for now
                 llvm::Type *intTy = llvm::Type::getInt32Ty(*context_);
                 return builder_->CreateLoad(intTy, operandVal, "derefval");
             }
+        }
+        case ast::UnaryExpr::OpKind::PreIncrement:
+        case ast::UnaryExpr::OpKind::PreDecrement:
+        case ast::UnaryExpr::OpKind::PostIncrement:
+        case ast::UnaryExpr::OpKind::PostDecrement: {
+            // Support only integer variables for now
+            llvm::Value *addr = emitAddress(expr->operand.get());
+            if(!addr) return nullptr;
+            llvm::Type *valTy = llvm::Type::getInt32Ty(*context_);
+            llvm::Value *oldVal = builder_->CreateLoad(valTy, addr, "oldinc");
+            llvm::Value *one = llvm::ConstantInt::get(valTy, 1);
+            bool isInc = (expr->op==ast::UnaryExpr::OpKind::PreIncrement || expr->op==ast::UnaryExpr::OpKind::PostIncrement);
+            llvm::Value *newVal = isInc ? builder_->CreateAdd(oldVal, one, "inc") : builder_->CreateSub(oldVal, one, "dec");
+            builder_->CreateStore(newVal, addr);
+            // Pre returns new, post returns old
+            bool isPost = (expr->op==ast::UnaryExpr::OpKind::PostIncrement || expr->op==ast::UnaryExpr::OpKind::PostDecrement);
+            return isPost ? oldVal : newVal;
         }
         case ast::UnaryExpr::OpKind::Plus: {
             llvm::Value *v = visitExpr(expr->operand.get());
@@ -472,68 +493,83 @@ llvm::Value* IRGenerator::visitBinaryExpr(ast::BinaryExpr *expr) {
         builder_->CreateStore(rhs, lhsAddr);
         return rhs;
     }
+    // Compound assignments
+    if (expr->op == ast::BinaryExpr::OpKind::AddAssign || expr->op == ast::BinaryExpr::OpKind::SubAssign ||
+        expr->op == ast::BinaryExpr::OpKind::MulAssign || expr->op == ast::BinaryExpr::OpKind::DivAssign ||
+        expr->op == ast::BinaryExpr::OpKind::ModAssign) {
+        llvm::Value *lhsAddr = emitAddress(expr->left.get());
+        if(!lhsAddr) return nullptr;
+        llvm::Value *lhsVal = visitExpr(expr->left.get()); // loads
+        llvm::Value *rhsVal = visitExpr(expr->right.get());
+        llvm::Value *result=nullptr;
+        switch(expr->op){
+            case ast::BinaryExpr::OpKind::AddAssign: result=builder_->CreateAdd(lhsVal,rhsVal,"addeq"); break;
+            case ast::BinaryExpr::OpKind::SubAssign: result=builder_->CreateSub(lhsVal,rhsVal,"subeq"); break;
+            case ast::BinaryExpr::OpKind::MulAssign: result=builder_->CreateMul(lhsVal,rhsVal,"muleq"); break;
+            case ast::BinaryExpr::OpKind::DivAssign: result=builder_->CreateSDiv(lhsVal,rhsVal,"diveq"); break;
+            case ast::BinaryExpr::OpKind::ModAssign: result=builder_->CreateSRem(lhsVal,rhsVal,"modeq"); break;
+            default: break;
+        }
+        builder_->CreateStore(result,lhsAddr);
+        return result;
+    }
+    // Short-circuit logical AND / OR
+    if (expr->op == ast::BinaryExpr::OpKind::LogicalAnd || expr->op == ast::BinaryExpr::OpKind::LogicalOr) {
+        llvm::Function *function = builder_->GetInsertBlock()->getParent();
+        llvm::BasicBlock *lhsBlock = builder_->GetInsertBlock();
+        llvm::Value *lhsVal = visitExpr(expr->left.get());
+        // Convert to i1 if needed
+        if(lhsVal->getType()->isIntegerTy() && lhsVal->getType()->getIntegerBitWidth()!=1)
+            lhsVal = builder_->CreateICmpNE(lhsVal, llvm::ConstantInt::get(lhsVal->getType(),0), "lhsbool");
+        llvm::BasicBlock *rhsBlock = llvm::BasicBlock::Create(*context_, expr->op==ast::BinaryExpr::OpKind::LogicalAnd?"and.rhs":"or.rhs", function);
+        llvm::BasicBlock *mergeBlock = llvm::BasicBlock::Create(*context_, expr->op==ast::BinaryExpr::OpKind::LogicalAnd?"and.merge":"or.merge");
+        if (expr->op == ast::BinaryExpr::OpKind::LogicalAnd) {
+            builder_->CreateCondBr(lhsVal, rhsBlock, mergeBlock);
+        } else { // LogicalOr
+            builder_->CreateCondBr(lhsVal, mergeBlock, rhsBlock);
+        }
+        // RHS
+        builder_->SetInsertPoint(rhsBlock);
+        llvm::Value *rhsVal = visitExpr(expr->right.get());
+        if(rhsVal->getType()->isIntegerTy() && rhsVal->getType()->getIntegerBitWidth()!=1)
+            rhsVal = builder_->CreateICmpNE(rhsVal, llvm::ConstantInt::get(rhsVal->getType(),0), "rhsbool");
+        builder_->CreateBr(mergeBlock);
+        rhsBlock = builder_->GetInsertBlock();
+        // Merge
+        function->insert(function->end(), mergeBlock);
+        builder_->SetInsertPoint(mergeBlock);
+        llvm::PHINode *phi = builder_->CreatePHI(llvm::Type::getInt1Ty(*context_), 2, expr->op==ast::BinaryExpr::OpKind::LogicalAnd?"andphi":"orphi");
+        if (expr->op == ast::BinaryExpr::OpKind::LogicalAnd) {
+            phi->addIncoming(rhsVal, rhsBlock);
+            phi->addIncoming(llvm::ConstantInt::getFalse(*context_), lhsBlock);
+        } else {
+            phi->addIncoming(llvm::ConstantInt::getTrue(*context_), lhsBlock);
+            phi->addIncoming(rhsVal, rhsBlock);
+        }
+        // Extend to int32 like other comparisons
+        return builder_->CreateZExt(phi, llvm::Type::getInt32Ty(*context_), "logicext");
+    }
     llvm::Value *left = visitExpr(expr->left.get());
     llvm::Value *right = visitExpr(expr->right.get());
     if(!left || !right) return nullptr;
     switch (expr->op) {
-        case ast::BinaryExpr::OpKind::Add:
-            return builder_->CreateAdd(left, right, "addtmp");
-        case ast::BinaryExpr::OpKind::Sub:
-            return builder_->CreateSub(left, right, "subtmp");
-        case ast::BinaryExpr::OpKind::Mul:
-            return builder_->CreateMul(left, right, "multmp");
-        case ast::BinaryExpr::OpKind::Div:
-            return builder_->CreateSDiv(left, right, "divtmp");
-        case ast::BinaryExpr::OpKind::Mod:
-            return builder_->CreateSRem(left, right, "modtmp");
-        case ast::BinaryExpr::OpKind::LT: {
-            llvm::Value *cmp = builder_->CreateICmpSLT(left, right, "cmptmp");
-            return builder_->CreateZExt(cmp, llvm::Type::getInt32Ty(*context_), "booltmp");
-        }
-        case ast::BinaryExpr::OpKind::GT: {
-            llvm::Value *cmp = builder_->CreateICmpSGT(left, right, "cmptmp");
-            return builder_->CreateZExt(cmp, llvm::Type::getInt32Ty(*context_), "booltmp");
-        }
-        case ast::BinaryExpr::OpKind::LE: {
-            llvm::Value *cmp = builder_->CreateICmpSLE(left, right, "cmptmp");
-            return builder_->CreateZExt(cmp, llvm::Type::getInt32Ty(*context_), "booltmp");
-        }
-        case ast::BinaryExpr::OpKind::GE: {
-            llvm::Value *cmp = builder_->CreateICmpSGE(left, right, "cmptmp");
-            return builder_->CreateZExt(cmp, llvm::Type::getInt32Ty(*context_), "booltmp");
-        }
-        case ast::BinaryExpr::OpKind::EQ: {
-            llvm::Value *cmp = builder_->CreateICmpEQ(left, right, "cmptmp");
-            return builder_->CreateZExt(cmp, llvm::Type::getInt32Ty(*context_), "booltmp");
-        }
-        case ast::BinaryExpr::OpKind::NE: {
-            llvm::Value *cmp = builder_->CreateICmpNE(left, right, "cmptmp");
-            return builder_->CreateZExt(cmp, llvm::Type::getInt32Ty(*context_), "booltmp");
-        }
-        case ast::BinaryExpr::OpKind::LogicalAnd:
-            return builder_->CreateAnd(left, right, "andtmp");
-        case ast::BinaryExpr::OpKind::LogicalOr:
-            return builder_->CreateOr(left, right, "ortmp");
-        case ast::BinaryExpr::OpKind::BitwiseAnd:
-            return builder_->CreateAnd(left, right, "andtmp");
-        case ast::BinaryExpr::OpKind::BitwiseOr:
-            return builder_->CreateOr(left, right, "ortmp");
-        case ast::BinaryExpr::OpKind::BitwiseXor:
-            return builder_->CreateXor(left, right, "xortmp");
-        case ast::BinaryExpr::OpKind::LeftShift:
-            return builder_->CreateShl(left, right, "shltmp");
-        case ast::BinaryExpr::OpKind::RightShift:
-            return builder_->CreateAShr(left, right, "shrtmp");
-        case ast::BinaryExpr::OpKind::AddAssign:
-        case ast::BinaryExpr::OpKind::SubAssign:
-        case ast::BinaryExpr::OpKind::MulAssign:
-        case ast::BinaryExpr::OpKind::DivAssign:
-        case ast::BinaryExpr::OpKind::ModAssign:
-            error("Compound assignment operators not yet implemented");
-            return nullptr;
-        default:
-            error("Unsupported binary operator");
-            return nullptr;
+        case ast::BinaryExpr::OpKind::Add: return builder_->CreateAdd(left,right,"addtmp");
+        case ast::BinaryExpr::OpKind::Sub: return builder_->CreateSub(left,right,"subtmp");
+        case ast::BinaryExpr::OpKind::Mul: return builder_->CreateMul(left,right,"multmp");
+        case ast::BinaryExpr::OpKind::Div: return builder_->CreateSDiv(left,right,"divtmp");
+        case ast::BinaryExpr::OpKind::Mod: return builder_->CreateSRem(left,right,"modtmp");
+        case ast::BinaryExpr::OpKind::LT: { auto *cmp=builder_->CreateICmpSLT(left,right,"cmptmp"); return builder_->CreateZExt(cmp, llvm::Type::getInt32Ty(*context_),"booltmp"); }
+        case ast::BinaryExpr::OpKind::GT: { auto *cmp=builder_->CreateICmpSGT(left,right,"cmptmp"); return builder_->CreateZExt(cmp, llvm::Type::getInt32Ty(*context_),"booltmp"); }
+        case ast::BinaryExpr::OpKind::LE: { auto *cmp=builder_->CreateICmpSLE(left,right,"cmptmp"); return builder_->CreateZExt(cmp, llvm::Type::getInt32Ty(*context_),"booltmp"); }
+        case ast::BinaryExpr::OpKind::GE: { auto *cmp=builder_->CreateICmpSGE(left,right,"cmptmp"); return builder_->CreateZExt(cmp, llvm::Type::getInt32Ty(*context_),"booltmp"); }
+        case ast::BinaryExpr::OpKind::EQ: { auto *cmp=builder_->CreateICmpEQ(left,right,"cmptmp"); return builder_->CreateZExt(cmp, llvm::Type::getInt32Ty(*context_),"booltmp"); }
+        case ast::BinaryExpr::OpKind::NE: { auto *cmp=builder_->CreateICmpNE(left,right,"cmptmp"); return builder_->CreateZExt(cmp, llvm::Type::getInt32Ty(*context_),"booltmp"); }
+        case ast::BinaryExpr::OpKind::BitwiseAnd: return builder_->CreateAnd(left,right,"andtmp");
+        case ast::BinaryExpr::OpKind::BitwiseOr: return builder_->CreateOr(left,right,"ortmp");
+        case ast::BinaryExpr::OpKind::BitwiseXor: return builder_->CreateXor(left,right,"xortmp");
+        case ast::BinaryExpr::OpKind::LeftShift: return builder_->CreateShl(left,right,"shltmp");
+        case ast::BinaryExpr::OpKind::RightShift: return builder_->CreateAShr(left,right,"shrtmp");
+        default: error("Unsupported binary operator"); return nullptr;
     }
 }
 

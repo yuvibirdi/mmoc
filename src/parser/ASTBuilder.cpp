@@ -384,79 +384,97 @@ antlrcpp::Any ASTBuilder::visitCastExpression(CParser::CastExpressionContext *ct
 }
 
 antlrcpp::Any ASTBuilder::visitUnaryExpression(CParser::UnaryExpressionContext *ctx) {
-    if (ctx->postfixExpression()) {
-        return visit(ctx->postfixExpression());
+    size_t idx = 0; int prefixInc=0, prefixDec=0; bool sawSizeof=false; std::string sizeofType;
+    while (idx < ctx->children.size()) {
+        if (auto *term = dynamic_cast<antlr4::tree::TerminalNode*>(ctx->children[idx])) {
+            int t = term->getSymbol()->getType();
+            if (t == CParser::PlusPlus) { ++prefixInc; ++idx; continue; }
+            if (t == CParser::MinusMinus) { ++prefixDec; ++idx; continue; }
+            if (t == CParser::Sizeof) { sawSizeof=true; ++idx; continue; }
+        }
+        break;
+    }
+    if (sawSizeof) {
+        // Very basic: sizeof <postfixExpression or unaryOperator castExpression>
+        // If pattern is: sizeof ( type ) we cannot easily distinguish; fallback constant 4
+        return std::any(static_cast<ast::Expr*>(new ast::IntegerLiteral(4)));
+    }
+    std::unique_ptr<ast::Expr> base;
+    if (auto *post = ctx->postfixExpression()) {
+        base = extractExpr(visit(post));
     } else if (ctx->unaryOperator()) {
         auto operand = extractExpr(visit(ctx->castExpression()));
-        
+        std::string opText = ctx->unaryOperator()->getText();
         ast::UnaryExpr::OpKind op;
-        auto *opCtx = ctx->unaryOperator();
-        std::string opText = opCtx->getText();
-        
-        if (opText == "&") op = ast::UnaryExpr::OpKind::AddressOf;
-        else if (opText == "*") op = ast::UnaryExpr::OpKind::Dereference;
-        else if (opText == "+") op = ast::UnaryExpr::OpKind::Plus;
-        else if (opText == "-") op = ast::UnaryExpr::OpKind::Minus;
-        else if (opText == "~") op = ast::UnaryExpr::OpKind::BitwiseNot;
-        else if (opText == "!") op = ast::UnaryExpr::OpKind::Not;
-        else op = ast::UnaryExpr::OpKind::Plus;
-        
-        return std::any(static_cast<ast::Expr*>(new ast::UnaryExpr(std::move(operand), op, true)));
+        if (opText=="&") op=ast::UnaryExpr::OpKind::AddressOf; else if (opText=="*") op=ast::UnaryExpr::OpKind::Dereference; else if (opText=="+") op=ast::UnaryExpr::OpKind::Plus; else if (opText=="-") op=ast::UnaryExpr::OpKind::Minus; else if (opText=="~") op=ast::UnaryExpr::OpKind::BitwiseNot; else if (opText=="!") op=ast::UnaryExpr::OpKind::Not; else op=ast::UnaryExpr::OpKind::Plus;
+        base = std::make_unique<ast::UnaryExpr>(std::move(operand), op, true);
+    } else {
+        return visitChildren(ctx);
     }
-    
-    return visit(ctx->postfixExpression());
+    int net = prefixInc - prefixDec;
+    while (net != 0) {
+        ast::UnaryExpr::OpKind op = net>0 ? ast::UnaryExpr::OpKind::PreIncrement : ast::UnaryExpr::OpKind::PreDecrement;
+        base = std::make_unique<ast::UnaryExpr>(std::move(base), op, true);
+        net += (net>0 ? -1 : 1);
+    }
+    return std::any(base.release());
 }
 
 antlrcpp::Any ASTBuilder::visitPostfixExpression(CParser::PostfixExpressionContext *ctx) {
-    // Start with the base expression (primaryExpression or compound literal)
     std::unique_ptr<ast::Expr> expr;
     if (ctx->primaryExpression()) {
-        auto result = visit(ctx->primaryExpression());
-        expr = extractExpr(result);
+        expr = extractExpr(visit(ctx->primaryExpression()));
     } else {
-        // Handle compound literals if needed
         return nullptr;
     }
-    
-    // Process postfix operators in sequence
-    size_t childIndex = 1; // Skip the primary expression
-    while (childIndex < ctx->children.size()) {
-        auto *child = ctx->children[childIndex];
-        
-        // Check for function call: '(' argumentExpressionList? ')'
-        if (auto *terminal = dynamic_cast<antlr4::tree::TerminalNode*>(child)) {
-            if (terminal->getSymbol()->getType() == CParser::LeftParen) {
-                // This is a function call
+    size_t i = 1; // child index after primaryExpression
+    while (i < ctx->children.size()) {
+        auto *child = ctx->children[i];
+        if (auto *term = dynamic_cast<antlr4::tree::TerminalNode*>(child)) {
+            int tt = term->getSymbol()->getType();
+            if (tt == CParser::PlusPlus) {
+                expr = std::make_unique<ast::UnaryExpr>(std::move(expr), ast::UnaryExpr::OpKind::PostIncrement, false);
+                ++i; continue;
+            } else if (tt == CParser::MinusMinus) {
+                expr = std::make_unique<ast::UnaryExpr>(std::move(expr), ast::UnaryExpr::OpKind::PostDecrement, false);
+                ++i; continue;
+            } else if (tt == CParser::LeftParen) {
+                // Function call: '(' argumentExpressionList? ')'
                 std::vector<std::unique_ptr<ast::Expr>> args;
-                
-                // Look for argumentExpressionList
-                if (childIndex + 1 < ctx->children.size()) {
-                    auto *nextChild = ctx->children[childIndex + 1];
-                    if (auto *argList = dynamic_cast<CParser::ArgumentExpressionListContext*>(nextChild)) {
-                        for (auto *argExpr : argList->assignmentExpression()) {
-                            auto argResult = visit(argExpr);
-                            auto arg = extractExpr(argResult);
-                            if (arg) {
-                                args.push_back(std::move(arg));
-                            }
+                // Look ahead to see if we have an argumentExpressionList
+                if (i + 1 < ctx->children.size()) {
+                    if (auto *argList = dynamic_cast<CParser::ArgumentExpressionListContext*>(ctx->children[i+1])) {
+                        // Collect each assignmentExpression
+                        for (auto *ae : argList->assignmentExpression()) {
+                            auto anyArg = visit(ae);
+                            auto *raw = std::any_cast<ast::Expr*>(anyArg);
+                            args.push_back(std::unique_ptr<ast::Expr>(raw));
                         }
-                        childIndex += 2; // Skip argumentExpressionList and ')'
+                        // Expect following ')'
+                        i += 3; // '(', argList, ')'
                     } else {
-                        childIndex += 1; // Skip just ')'
+                        // No arguments -> expect immediate ')'
+                        i += 2; // '(', ')'
                     }
+                } else {
+                    // Malformed, break
+                    ++i;
                 }
-                
                 expr = std::make_unique<ast::CallExpr>(std::move(expr), std::move(args));
-                childIndex++; // Move to next token after ')'
                 continue;
+            } else if (tt == CParser::LeftBracket) {
+                // Array subscript: expr '[' expression ']'
+                if (i + 2 < ctx->children.size()) {
+                    auto *indexChild = ctx->children[i+1];
+                    auto indexAny = visit(indexChild);
+                    auto indexExpr = extractExpr(indexAny);
+                    expr = std::make_unique<ast::ArraySubscriptExpr>(std::move(expr), std::move(indexExpr));
+                    i += 3; continue; // '[', expr, ']'
+                }
             }
         }
-        
-        // Handle other postfix operators (array subscript, member access, increment/decrement)
-        // For now, skip them
-        childIndex++;
+        ++i; // Fallback advance
     }
-    
     return std::any(expr.release());
 }
 
@@ -465,10 +483,7 @@ antlrcpp::Any ASTBuilder::visitPrimaryExpression(CParser::PrimaryExpressionConte
         return std::any(static_cast<ast::Expr*>(new ast::Identifier(ctx->Identifier()->getText())));
     } else if (ctx->Constant()) {
         std::string text = ctx->Constant()->getText();
-        
-        // Determine constant type
-        if (text.find('.') != std::string::npos || text.find('e') != std::string::npos || 
-            text.find('E') != std::string::npos) {
+        if (text.find('.') != std::string::npos || text.find('e') != std::string::npos || text.find('E') != std::string::npos) {
             return std::any(static_cast<ast::Expr*>(new ast::FloatingLiteral(parseFloatingConstant(text))));
         } else if (text.front() == '\'' && text.back() == '\'') {
             return std::any(static_cast<ast::Expr*>(new ast::CharacterLiteral(parseCharacterConstant(text))));
@@ -480,7 +495,6 @@ antlrcpp::Any ASTBuilder::visitPrimaryExpression(CParser::PrimaryExpressionConte
     } else if (ctx->expression()) {
         return visit(ctx->expression());
     }
-    
     return nullptr;
 }
 
