@@ -32,10 +32,10 @@ jobs:
           lld-17 \
           libantlr4-runtime-dev \
           antlr4 \
+          openjdk-17-jre-headless \
           pkg-config \
           ninja-build \
-          cppcheck
-        # Create symlinks for tools
+          cppcheck curl
         sudo ln -sf /usr/bin/llvm-config-17 /usr/bin/llvm-config
         sudo ln -sf /usr/bin/clang-17 /usr/bin/clang
         sudo ln -sf /usr/bin/clang++-17 /usr/bin/clang++
@@ -45,15 +45,29 @@ jobs:
       run: |
         brew install \
           llvm \
-          antlr4 \
+          antlr \
           antlr4-cpp-runtime \
+          openjdk \
           ninja \
           cppcheck \
+          curl \
           pkg-config
-        # Add LLVM to PATH
         echo "$(brew --prefix llvm)/bin" >> $GITHUB_PATH
-        # Set up ANTLR
-        echo "CLASSPATH=$(brew --prefix)/opt/antlr4-runtime/libexec/antlr-4.13.2-complete.jar:$CLASSPATH" >> $GITHUB_ENV
+    
+    - name: Setup ANTLR tool (all platforms)
+      run: |
+        set -e
+        ANTLR_VERSION=4.13.2
+        JAR_URL="https://www.antlr.org/download/antlr-${ANTLR_VERSION}-complete.jar"
+        mkdir -p "$HOME/.local/lib/antlr" "$HOME/.local/bin"
+        curl -L "$JAR_URL" -o "$HOME/.local/lib/antlr/antlr.jar"
+        cat > "$HOME/.local/bin/antlr" <<'EOF'
+#!/usr/bin/env bash
+java -jar "$HOME/.local/lib/antlr/antlr.jar" "$@"
+EOF
+        chmod +x "$HOME/.local/bin/antlr"
+        echo "$HOME/.local/bin" >> $GITHUB_PATH
+        antlr -version
     
     - name: Cache ANTLR generated files
       uses: actions/cache@v3
@@ -99,24 +113,26 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install deps (Arch)
         run: |
-          pacman -Sy --noconfirm --needed base-devel llvm clang lld cmake ninja python git cppcheck
-          # ANTLR runtime (may exist as antlr4-runtime or from source). Try pacman then fallback.
+          pacman -Sy --noconfirm --needed base-devel llvm clang lld cmake ninja python git cppcheck curl jre-openjdk
           if ! pacman -Qi antlr4-runtime &>/dev/null; then
             pacman -S --noconfirm antlr4-runtime || true
           fi
-          if ! pacman -Qi antlr4-runtime &>/dev/null; then
-            echo "Building antlr4 runtime from source (fallback)";
-            git clone https://github.com/antlr/antlr4.git --depth=1
-            cd antlr4/runtime/Cpp && mkdir build && cd build
-            cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON ..
-            cmake --build . -j
-            cmake --install . --prefix /usr/local
-            cd ../../../../
-          fi
+          # Download ANTLR jar (tool) uniformly
+          ANTLR_VERSION=4.13.2
+          JAR_URL="https://www.antlr.org/download/antlr-${ANTLR_VERSION}-complete.jar"
+          mkdir -p /root/.local/lib/antlr /root/.local/bin
+          curl -L "$JAR_URL" -o /root/.local/lib/antlr/antlr.jar
+          cat > /root/.local/bin/antlr <<'EOF'
+#!/usr/bin/env bash
+java -jar /root/.local/lib/antlr/antlr.jar "$@"
+EOF
+          chmod +x /root/.local/bin/antlr
+          echo "/root/.local/bin" >> $GITHUB_PATH
+          antlr -version
       - name: Configure
         env:
-          ANTLR4_INCLUDE: /usr/local/include/antlr4-runtime
-          ANTLR4_LIB: /usr/local/lib
+          ANTLR4_INCLUDE: /usr/include/antlr4-runtime
+          ANTLR4_LIB: /usr/lib
         run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
       - name: Build
         run: cmake --build build --target all -j
