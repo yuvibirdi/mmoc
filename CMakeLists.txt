@@ -31,6 +31,13 @@ find_library(ANTLR4_LIBRARY
     NAMES antlr4-runtime libantlr4-runtime
     HINTS $ENV{ANTLR4_LIB} /usr/lib /usr/local/lib /opt/homebrew/lib /opt/local/lib
 )
+
+# Find the ANTLR tool executable provided by system packages (typically 'antlr4' or 'antlr')
+find_program(ANTLR4_TOOL NAMES antlr4 antlr)
+if(NOT ANTLR4_TOOL)
+    message(FATAL_ERROR "Could not locate ANTLR tool executable (expected 'antlr4' or 'antlr'). Please install it.")
+endif()
+
 if(NOT ANTLR4_INCLUDE_DIR OR NOT ANTLR4_LIBRARY)
     message(FATAL_ERROR "Could not locate ANTLR4 runtime (set ANTLR4_INCLUDE / ANTLR4_LIB env vars)")
 endif()
@@ -53,9 +60,9 @@ add_custom_command(
         ${CMAKE_SOURCE_DIR}/generated/CParser.h
         ${CMAKE_SOURCE_DIR}/generated/CBaseVisitor.h
         ${CMAKE_SOURCE_DIR}/generated/CVisitor.h
-    COMMAND antlr -Dlanguage=Cpp -visitor -o ${CMAKE_SOURCE_DIR}/generated ${CMAKE_SOURCE_DIR}/grammar/C.g4
+    COMMAND ${ANTLR4_TOOL} -Dlanguage=Cpp -visitor -o ${CMAKE_SOURCE_DIR}/generated ${CMAKE_SOURCE_DIR}/grammar/C.g4
     DEPENDS grammar/C.g4
-    COMMENT "Generating ANTLR4 parser files"
+    COMMENT "Generating ANTLR4 parser files using ${ANTLR4_TOOL}"
 )
 
 # Grammar library

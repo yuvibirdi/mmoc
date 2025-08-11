@@ -6,9 +6,6 @@ on:
   pull_request:
     branches: [ main ]
 
-env:
-  ANTLR_VERSION: 4.13.2
-
 jobs:
   build:
     name: Build & Test (${ { matrix.os } } / ${ { matrix.build_type } })
@@ -40,20 +37,6 @@ jobs:
         run: |
           brew install llvm antlr antlr4-cpp-runtime openjdk ninja cppcheck curl pkg-config
           echo "$(brew --prefix llvm)/bin" >> $GITHUB_PATH
-
-      - name: Setup ANTLR tool (all platforms)
-        run: |
-          set -e
-          JAR_URL="https://www.antlr.org/download/antlr-${ANTLR_VERSION}-complete.jar"
-          mkdir -p "$HOME/.local/lib/antlr" "$HOME/.local/bin"
-          curl -sSL "$JAR_URL" -o "$HOME/.local/lib/antlr/antlr.jar"
-          cat > "$HOME/.local/bin/antlr" <<'EOF'
-#!/usr/bin/env bash
-java -jar "$HOME/.local/lib/antlr/antlr.jar" "$@"
-EOF
-          chmod +x "$HOME/.local/bin/antlr"
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-          antlr -version
 
       - name: Cache generated parser
         uses: actions/cache@v4
@@ -99,18 +82,7 @@ EOF
 
       - name: Install deps (Arch)
         run: |
-          pacman -Sy --noconfirm --needed base-devel llvm clang lld cmake ninja python git cppcheck curl jre-openjdk
-          pacman -S --noconfirm antlr4-runtime || true
-          JAR_URL="https://www.antlr.org/download/antlr-${ANTLR_VERSION}-complete.jar"
-          mkdir -p /root/.local/lib/antlr /root/.local/bin
-          curl -sSL "$JAR_URL" -o /root/.local/lib/antlr/antlr.jar
-          cat > /root/.local/bin/antlr <<'EOF'
-#!/usr/bin/env bash
-java -jar /root/.local/lib/antlr/antlr.jar "$@"
-EOF
-          chmod +x /root/.local/bin/antlr
-          echo "/root/.local/bin" >> $GITHUB_PATH
-          antlr -version
+          pacman -Sy --noconfirm --needed base-devel llvm clang lld cmake ninja python git cppcheck curl jre-openjdk antlr4-runtime antlr4
 
       - name: Configure
         env:
