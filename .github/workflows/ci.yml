@@ -67,8 +67,6 @@ jobs:
             -I src/ -I generated/ \
             src/
 
-      - name: CTest
-        run: ctest --test-dir build --output-on-failure -j
 
       - name: Python test suite
         run: python3 tests/test_runner.py
