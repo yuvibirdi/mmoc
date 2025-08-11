@@ -15,6 +15,18 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
+# On macOS, find the SDK path and add it to compiler flags to find system headers
+if(APPLE)
+    execute_process(
+        COMMAND xcrun --sdk macosx --show-sdk-path
+        OUTPUT_VARIABLE MACOSX_SDK_PATH
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    if(MACOSX_SDK_PATH)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -isysroot ${MACOSX_SDK_PATH}")
+    endif()
+endif()
+
 # Include custom CMake modules
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 

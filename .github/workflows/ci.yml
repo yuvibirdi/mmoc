@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    name: Build & Test (${ { matrix.os } } / ${ { matrix.build_type } })
+    name: Build & Test (${{ matrix.os }} / ${{ matrix.build_type }})
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
@@ -82,7 +82,7 @@ jobs:
 
       - name: Install deps (Arch)
         run: |
-          pacman -Sy --noconfirm --needed base-devel llvm clang lld cmake ninja python git cppcheck curl jre-openjdk antlr4-runtime antlr4
+          pacman -Sy --noconfirm --needed base-devel llvm clang lld cmake ninja python git cppcheck curl jdk-openjdk antlr4-runtime antlr4
 
       - name: Configure
         env:
