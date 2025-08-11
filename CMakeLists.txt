@@ -23,6 +23,8 @@ if(APPLE)
         OUTPUT_STRIP_TRAILING_WHITESPACE
     )
     if(MACOSX_SDK_PATH)
+        # Use CMAKE_CXX_FLAGS for all build types, and also set for C compiler
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -isysroot ${MACOSX_SDK_PATH}")
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -isysroot ${MACOSX_SDK_PATH}")
     endif()
 endif()

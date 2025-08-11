@@ -1,5 +1,5 @@
 #include "sema/TypeChecker.h"
-#include "utils/Error.h"
+#include <algorithm>
 #include <iostream>
 
 namespace sema {
