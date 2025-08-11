@@ -21,9 +21,19 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 # Find required packages
 include(LLVMSetup)
 
-# Manually set ANTLR4 paths for macOS
-set(ANTLR4_INCLUDE_DIR "/opt/homebrew/include/antlr4-runtime")
-set(ANTLR4_LIBRARY "/opt/homebrew/lib/libantlr4-runtime.dylib")
+# Find ANTLR4 runtime flexibly
+find_path(ANTLR4_INCLUDE_DIR
+    NAMES antlr4-runtime.h
+    HINTS $ENV{ANTLR4_INCLUDE} /usr/include /usr/local/include /opt/homebrew/include /opt/local/include
+    PATH_SUFFIXES antlr4-runtime
+)
+find_library(ANTLR4_LIBRARY
+    NAMES antlr4-runtime libantlr4-runtime
+    HINTS $ENV{ANTLR4_LIB} /usr/lib /usr/local/lib /opt/homebrew/lib /opt/local/lib
+)
+if(NOT ANTLR4_INCLUDE_DIR OR NOT ANTLR4_LIBRARY)
+    message(FATAL_ERROR "Could not locate ANTLR4 runtime (set ANTLR4_INCLUDE / ANTLR4_LIB env vars)")
+endif()
 
 # Include directories
 include_directories(src)

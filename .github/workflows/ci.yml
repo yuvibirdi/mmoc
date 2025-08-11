@@ -82,7 +82,7 @@ jobs:
     
     - name: Upload build artifacts
       if: failure()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: build-logs-${{ matrix.os }}-${{ matrix.build_type }}
         path: |
@@ -99,8 +99,24 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install deps (Arch)
         run: |
-          pacman -Sy --noconfirm --needed base-devel llvm clang lld cmake ninja python antlr4-runtime cppcheck git
+          pacman -Sy --noconfirm --needed base-devel llvm clang lld cmake ninja python git cppcheck
+          # ANTLR runtime (may exist as antlr4-runtime or from source). Try pacman then fallback.
+          if ! pacman -Qi antlr4-runtime &>/dev/null; then
+            pacman -S --noconfirm antlr4-runtime || true
+          fi
+          if ! pacman -Qi antlr4-runtime &>/dev/null; then
+            echo "Building antlr4 runtime from source (fallback)";
+            git clone https://github.com/antlr/antlr4.git --depth=1
+            cd antlr4/runtime/Cpp && mkdir build && cd build
+            cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON ..
+            cmake --build . -j
+            cmake --install . --prefix /usr/local
+            cd ../../../../
+          fi
       - name: Configure
+        env:
+          ANTLR4_INCLUDE: /usr/local/include/antlr4-runtime
+          ANTLR4_LIB: /usr/local/lib
         run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
       - name: Build
         run: cmake --build build --target all -j
