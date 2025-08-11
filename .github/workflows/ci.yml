@@ -26,17 +26,54 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             llvm-17 llvm-17-dev clang-17 lld-17 \
-            libantlr4-runtime-dev antlr4 openjdk-17-jre-headless \
-            pkg-config ninja-build cppcheck curl
+            openjdk-17-jre-headless \
+            pkg-config ninja-build cppcheck curl wget
           sudo ln -sf /usr/bin/llvm-config-17 /usr/bin/llvm-config
           sudo ln -sf /usr/bin/clang-17 /usr/bin/clang
           sudo ln -sf /usr/bin/clang++-17 /usr/bin/clang++
+          
+          # Install ANTLR4 4.13.1 for compatibility
+          cd /tmp
+          wget https://www.antlr.org/download/antlr-4.13.1-complete.jar
+          sudo mkdir -p /usr/local/lib
+          sudo mv antlr-4.13.1-complete.jar /usr/local/lib/
+          echo '#!/bin/bash' | sudo tee /usr/local/bin/antlr4
+          echo 'java -jar /usr/local/lib/antlr-4.13.1-complete.jar "$@"' | sudo tee -a /usr/local/bin/antlr4
+          sudo chmod +x /usr/local/bin/antlr4
+          
+          # Install ANTLR4 C++ runtime 4.13.1
+          wget https://github.com/antlr/antlr4/archive/refs/tags/4.13.1.tar.gz
+          tar -xzf 4.13.1.tar.gz
+          cd antlr4-4.13.1/runtime/Cpp
+          mkdir build && cd build
+          cmake .. -DCMAKE_BUILD_TYPE=Release
+          make -j$(nproc)
+          sudo make install
+          sudo ldconfig
 
       - name: Install dependencies (macOS)
         if: runner.os == 'macOS'
         run: |
-          brew install llvm antlr antlr4-cpp-runtime openjdk ninja cppcheck curl pkg-config
+          brew install llvm openjdk ninja cppcheck curl pkg-config
           echo "$(brew --prefix llvm)/bin" >> $GITHUB_PATH
+          
+          # Install ANTLR4 4.13.1 for compatibility
+          cd /tmp
+          wget https://www.antlr.org/download/antlr-4.13.1-complete.jar
+          sudo mkdir -p /usr/local/lib
+          sudo mv antlr-4.13.1-complete.jar /usr/local/lib/
+          echo '#!/bin/bash' | sudo tee /usr/local/bin/antlr4
+          echo 'java -jar /usr/local/lib/antlr-4.13.1-complete.jar "$@"' | sudo tee -a /usr/local/bin/antlr4
+          sudo chmod +x /usr/local/bin/antlr4
+          
+          # Install ANTLR4 C++ runtime 4.13.1
+          wget https://github.com/antlr/antlr4/archive/refs/tags/4.13.1.tar.gz
+          tar -xzf 4.13.1.tar.gz
+          cd antlr4-4.13.1/runtime/Cpp
+          mkdir build && cd build
+          cmake .. -DCMAKE_BUILD_TYPE=Release
+          make -j$(sysctl -n hw.ncpu)
+          sudo make install
 
       - name: Cache generated parser
         uses: actions/cache@v4
