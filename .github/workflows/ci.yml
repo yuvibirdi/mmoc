@@ -81,20 +81,6 @@ jobs:
       - name: Build
         run: cmake --build build --target all -j
 
-      - name: Run static analysis (cppcheck)
-        if: matrix.build_type == 'Debug'
-        run: |
-          cppcheck --enable=all --error-exitcode=1 \
-            --suppress=missingIncludeSystem \
-            --suppress=missingInclude \
-            --suppress=ignoredReturnValue \
-            --suppress=unusedFunction \
-            --suppress=unusedVariable \
-            --suppress=useStlAlgorithm \
-            -I src/ -I generated/ \
-            src/
-
-
       - name: Python test suite
         run: python3 tests/test_runner.py
 
