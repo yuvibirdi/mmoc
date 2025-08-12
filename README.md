@@ -1,4 +1,4 @@
-# MMOC - LLVM-Backed C99/C11 Progressing Compiler
+# MMOC (Making My Own Compiler) - LLVM-Backed C99/C11 Compiler
 
 A modern C99-first compiler (expanding toward C11) built with LLVM and ANTLR4 in C++20.
 
@@ -20,37 +20,17 @@ Implemented (green tests):
 Planned next: pointer arithmetic scaling, comma operator, do-while, switch.
 
 ## Supported Platforms
-- macOS (Apple Silicon / Intel)
-- Ubuntu (CI: ubuntu-latest)
-- Arch Linux (CI container job)
+- macOS 
+- Ubuntu 
+- Arch Linux 
 
-## Prerequisites
-
-### macOS (Homebrew)
-```bash
-brew install llvm antlr4 antlr4-cpp-runtime cmake ninja
+## Quick Start
 ```
-Add to PATH (optional):
-```bash
-echo "export PATH=\"$(brew --prefix llvm)/bin:$PATH\"" >> ~/.bashrc
-```
+### Prerequisites
 
-### Ubuntu (22.04+)
 ```bash
-sudo apt update
-sudo apt install -y llvm-17 llvm-17-dev clang-17 lld-17 \
-  libantlr4-runtime-dev antlr4 pkg-config ninja-build python3
-sudo ln -sf /usr/bin/llvm-config-17 /usr/bin/llvm-config
-sudo ln -sf /usr/bin/clang-17 /usr/bin/clang
-sudo ln -sf /usr/bin/clang++-17 /usr/bin/clang++
+./setup.sh # this should dynamcially based on your os, install all the needed packages and configure the project 
 ```
-
-### Arch Linux
-```bash
-sudo pacman -S --needed base-devel llvm clang lld cmake ninja antlr4-runtime python
-```
-If antlr4 runtime headers not found, install from AUR (antlr4-cpp-runtime) or build locally.
-
 ## Build
 ```bash
 git clone <repository-url> mmoc
@@ -75,19 +55,16 @@ cmake --build build -j
 ```bash
 python3 tests/test_runner.py               # all tests
 python3 tests/test_runner.py -f Operators  # filter
-ctest --test-dir build --output-on-failure
+ctest --test-dir build --output-on-failure # TODO unit tests
 ```
 
 ## CI
-GitHub Actions builds on macOS, Ubuntu (Debug & Release) and Arch (Release). Runs Python test harness and CTest.
+GitHub Actions builds on macOS, Ubuntu and Arch. Testing using the Python test harness.
 
 ## Development Notes
 - Parser: ANTLR4 generated from C.g4 (C11 grammar). ASTBuilder narrows to implemented subset.
 - IR: Opaque pointer mode, integer-focused semantics. Future: richer type system & promotions.
 - Preprocessing: external clang -E invocation.
 
-## Roadmap Snapshot
-See STATUS.md for detailed ordering.
-
-## License
-BSD-based upstream grammar components; project code MIT (add LICENSE file TBD).
+## Implementation Status: 
+See STATUS.md for the detailed status.
