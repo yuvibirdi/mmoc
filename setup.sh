@@ -11,7 +11,12 @@ echo "=========================="
 if [[ "$OSTYPE" == "darwin"* ]]; then
     OS="macos"
 elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    OS="linux"
+    # Check if it's Arch Linux
+    if [[ -f /etc/arch-release ]] || command -v pacman &> /dev/null; then
+        OS="arch"
+    else
+        OS="linux"
+    fi
 else
     echo "Unsupported OS: $OSTYPE"
     exit 1
@@ -67,6 +72,45 @@ elif [[ "$OS" == "linux" ]]; then
     sudo ln -sf /usr/bin/llvm-config-17 /usr/bin/llvm-config || true
     sudo ln -sf /usr/bin/clang-17 /usr/bin/clang || true
     sudo ln -sf /usr/bin/clang++-17 /usr/bin/clang++ || true
+
+elif [[ "$OS" == "arch" ]]; then
+    echo "Installing dependencies via pacman..."
+    
+    # Check if we need sudo (not in container)
+    if [[ $EUID -eq 0 ]]; then
+        # Running as root (e.g., in container)
+        pacman -Sy --noconfirm --needed \
+            base-devel \
+            llvm \
+            clang \
+            lld \
+            cmake \
+            ninja \
+            python \
+            git \
+            cppcheck \
+            curl \
+            jdk-openjdk \
+            antlr4-runtime \
+            antlr4
+    else
+        # Running as regular user
+        sudo pacman -Sy --noconfirm --needed \
+            base-devel \
+            llvm \
+            clang \
+            lld \
+            cmake \
+            ninja \
+            python \
+            git \
+            cppcheck \
+            curl \
+            jdk-openjdk \
+            antlr4-runtime \
+            antlr4
+    fi
+
 fi
 
 echo ""
