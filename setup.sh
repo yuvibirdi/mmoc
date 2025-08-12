@@ -61,17 +61,30 @@ elif [[ "$OS" == "linux" ]]; then
         clang-17 \
         lld-17 \
         libantlr4-runtime-dev \
-        antlr4 \
         cmake \
         ninja-build \
         pkg-config \
         cppcheck \
-        build-essential
+        build-essential \
+        openjdk-17-jre-headless \
+        curl \
+        wget
     
     echo "Creating symlinks..."
     sudo ln -sf /usr/bin/llvm-config-17 /usr/bin/llvm-config || true
     sudo ln -sf /usr/bin/clang-17 /usr/bin/clang || true
     sudo ln -sf /usr/bin/clang++-17 /usr/bin/clang++ || true
+    
+    echo "Installing ANTLR4 tool..."
+    # Install ANTLR4 tool since Ubuntu doesn't have antlr4 package in standard repos
+    cd /tmp
+    wget https://www.antlr.org/download/antlr-4.13.1-complete.jar
+    sudo mkdir -p /usr/local/lib
+    sudo mv antlr-4.13.1-complete.jar /usr/local/lib/
+    echo '#!/bin/bash' | sudo tee /usr/local/bin/antlr4
+    echo 'java -jar /usr/local/lib/antlr-4.13.1-complete.jar "$@"' | sudo tee -a /usr/local/bin/antlr4
+    sudo chmod +x /usr/local/bin/antlr4
+    cd - > /dev/null
 
 elif [[ "$OS" == "arch" ]]; then
     echo "Installing dependencies via pacman..."
