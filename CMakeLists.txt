@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 3.20)
 project(mmoc VERSION 1.0.0 LANGUAGES C CXX)
 
+# Prevent GCC usage on macOS due to ABI mismatch with Homebrew libraries
+if(APPLE AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    message(FATAL_ERROR "GCC on macOS is not supported. Homebrew's LLVM and ANTLR4 libraries are built with clang/libc++, causing ABI mismatch with GCC/libstdc++ (std::__1:: vs std::__cxx11::). Please use clang: export CC=clang CXX=clang++")
+endif()
+
 # Set C++ standard and compiler flags
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -46,12 +51,6 @@ find_library(ANTLR4_LIBRARY
     HINTS $ENV{ANTLR4_LIB} /usr/lib /usr/local/lib /opt/homebrew/lib /opt/local/lib
 )
 
-# Find the ANTLR tool executable provided by system packages (typically 'antlr4' or 'antlr')
-find_program(ANTLR4_TOOL NAMES antlr4 antlr)
-if(NOT ANTLR4_TOOL)
-    message(FATAL_ERROR "Could not locate ANTLR tool executable (expected 'antlr4' or 'antlr'). Please install it.")
-endif()
-
 if(NOT ANTLR4_INCLUDE_DIR OR NOT ANTLR4_LIBRARY)
     message(FATAL_ERROR "Could not locate ANTLR4 runtime (set ANTLR4_INCLUDE / ANTLR4_LIB env vars)")
 endif()
@@ -60,24 +59,23 @@ endif()
 include_directories(src)
 include_directories(${CMAKE_SOURCE_DIR}/generated)
 
-# Create generated directory
-file(MAKE_DIRECTORY ${CMAKE_SOURCE_DIR}/generated)
-
-# Generate parser files
-add_custom_command(
-    OUTPUT 
-        ${CMAKE_SOURCE_DIR}/generated/CLexer.cpp
-        ${CMAKE_SOURCE_DIR}/generated/CParser.cpp
-        ${CMAKE_SOURCE_DIR}/generated/CBaseVisitor.cpp
-        ${CMAKE_SOURCE_DIR}/generated/CVisitor.cpp
-        ${CMAKE_SOURCE_DIR}/generated/CLexer.h
-        ${CMAKE_SOURCE_DIR}/generated/CParser.h
-        ${CMAKE_SOURCE_DIR}/generated/CBaseVisitor.h
-        ${CMAKE_SOURCE_DIR}/generated/CVisitor.h
-    COMMAND ${ANTLR4_TOOL} -Dlanguage=Cpp -visitor -o ${CMAKE_SOURCE_DIR}/generated ${CMAKE_SOURCE_DIR}/grammar/C.g4
-    DEPENDS grammar/C.g4
-    COMMENT "Generating ANTLR4 parser files using ${ANTLR4_TOOL}"
+# Check that ANTLR generated files exist (should be created by setup.sh)
+set(ANTLR_FILES
+    ${CMAKE_SOURCE_DIR}/generated/CLexer.cpp
+    ${CMAKE_SOURCE_DIR}/generated/CParser.cpp
+    ${CMAKE_SOURCE_DIR}/generated/CBaseVisitor.cpp
+    ${CMAKE_SOURCE_DIR}/generated/CVisitor.cpp
+    ${CMAKE_SOURCE_DIR}/generated/CLexer.h
+    ${CMAKE_SOURCE_DIR}/generated/CParser.h
+    ${CMAKE_SOURCE_DIR}/generated/CBaseVisitor.h
+    ${CMAKE_SOURCE_DIR}/generated/CVisitor.h
 )
+
+foreach(ANTLR_FILE ${ANTLR_FILES})
+    if(NOT EXISTS ${ANTLR_FILE})
+        message(FATAL_ERROR "ANTLR generated file ${ANTLR_FILE} not found. Please run setup.sh first to generate parser files.")
+    endif()
+endforeach()
 
 # Grammar library
 add_library(cgrammar STATIC
