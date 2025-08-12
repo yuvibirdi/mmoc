@@ -134,16 +134,25 @@ jobs:
       - name: Prepare release assets
         run: |
           mkdir -p release-assets
-          # Copy and rename binaries with proper extensions
+          # Create tar.gz archives that preserve executable permissions
           if [ -f mmoc-linux-x64/mmoc ]; then
+            chmod +x mmoc-linux-x64/mmoc
+            tar -czf release-assets/mmoc-linux-x64.tar.gz -C mmoc-linux-x64 mmoc
+            # Also create standalone binary for convenience
             cp mmoc-linux-x64/mmoc release-assets/mmoc-linux-x64
             chmod +x release-assets/mmoc-linux-x64
           fi
           if [ -f mmoc-macos-arm64/mmoc ]; then
+            chmod +x mmoc-macos-arm64/mmoc
+            tar -czf release-assets/mmoc-macos-arm64.tar.gz -C mmoc-macos-arm64 mmoc
+            # Also create standalone binary for convenience
             cp mmoc-macos-arm64/mmoc release-assets/mmoc-macos-arm64
             chmod +x release-assets/mmoc-macos-arm64
           fi
           if [ -f mmoc-arch-x64/mmoc ]; then
+            chmod +x mmoc-arch-x64/mmoc
+            tar -czf release-assets/mmoc-arch-x64.tar.gz -C mmoc-arch-x64 mmoc
+            # Also create standalone binary for convenience
             cp mmoc-arch-x64/mmoc release-assets/mmoc-arch-x64
             chmod +x release-assets/mmoc-arch-x64
           fi
