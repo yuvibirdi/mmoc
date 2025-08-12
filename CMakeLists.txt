@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(mmoc VERSION 1.0.0 LANGUAGES C CXX)
+project(mmoc VERSION 0.1.0 LANGUAGES C CXX)
 
 # Prevent GCC usage on macOS due to ABI mismatch with Homebrew libraries
 if(APPLE AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")

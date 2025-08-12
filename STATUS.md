@@ -1,6 +1,6 @@
-# MMOC Compiler Status Report (Updated)
+# MMOC Status Report  (V0.1)
 
-## ✅ WORKING FEATURES
+## Fully Implemented
 - Core program structure, variables, functions, control flow (if/while/for, break/continue)
 - Arithmetic + comparison + bitwise ops
 - Logical operators with short-circuit (&&, ||)
@@ -13,7 +13,7 @@
 - Compound assignment operators (+=, -=, *=, /=, %=)
 - Prefix & postfix ++ / -- (basic int vars) with correct value semantics
 
-## 🚧 PARTIAL / LIMITED
+## Partially Implemented 
 - Type system: currently treats most arithmetic as int (no implicit promotion rules yet)
 - Pointer arithmetic scaling not implemented
 - Array indexing lowered manually (no GEP scaling yet)
@@ -21,32 +21,8 @@
 - No typedef resolution
 - No floating point operations despite float/double literal placeholder
 
-## ❌ NOT YET IMPLEMENTED
-1. sizeof (types and expressions)
-2. Comma operator sequencing
-3. do-while loop
-4. switch / case / default
-5. Structs, unions, enums, bit-fields
-6. Typedef semantics
-7. Signed/unsigned / short / long / long long combinations & integer promotions
-8. float/double actual IR arithmetic, constant folding
-9. Designated / nested initializers & compound literals
-10. Function pointers & complex declarators
-11. Variadic functions (…)
-12. Storage class & qualifiers semantics: static, extern, const, volatile, restrict
-13. Pointer arithmetic scaling (int *p; p+1 -> +4 bytes)
-14. String literal array sizing and decay rules
-15. Enums constant value evaluation
-16. Alignment: _Alignas, _Alignof
-17. _Static_assert parsing to IR no-op / diagnostics
-18. _Generic
-19. _Atomic qualifier / atomics
-20. _Noreturn effect on control flow analysis
-21. _Thread_local storage duration
-22. Error diagnostics (line/column, semantic checks) improvements
-23. Implicit casts & usual arithmetic conversions
 
-## 🎯 NEXT IMPLEMENTATION ORDER
+## TODO 
 1. sizeof (expressions + primitive types) minimal constants
 2. Pointer arithmetic scaling (Add/Sub when one side is pointer)
 3. Comma operator sequencing (left eval then right result)
@@ -72,9 +48,6 @@
 23. Thread-local storage (_Thread_local)
 24. Enhanced diagnostics & semantic checks
 
-## 🔄 TEST SUITE STATUS
+## Testing Status:  
 - 41/41 tests passing.
 - New tests upcoming: sizeof/basic_types.c, sizeof/expressions.c, pointer_arith/basic.c
-
-## 📌 NOTES
-Maintain green tests after each incremental feature. Introduce new test folders as features expand. Keep STATUS.md in sync.

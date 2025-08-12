@@ -12,7 +12,13 @@ void printUsage(const std::string &programName) {
               << "  -E             Preprocess only\n"
               << "  -I <dir>       Add include directory\n"
               << "  -D <macro>     Define macro\n"
+              << "  --version      Show version information\n"
               << "  -h, --help     Show this help message\n";
+}
+
+void printVersion() {
+    std::cout << "MMOC v0.1.0\n"
+              << "C99/C11 compiler built with LLVM and ANTLR4\n";
 }
 
 int main(int argc, char *argv[]) {
@@ -35,6 +41,9 @@ int main(int argc, char *argv[]) {
         
         if (arg == "-h" || arg == "--help") {
             printUsage(argv[0]);
+            return 0;
+        } else if (arg == "--version") {
+            printVersion();
             return 0;
         } else if (arg == "-v") {
             verbose = true;

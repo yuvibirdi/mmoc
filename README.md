@@ -2,23 +2,6 @@
 
 A modern C99-first compiler (expanding toward C11) built with LLVM and ANTLR4 in C++20.
 
-## Features
-
-Implemented (green tests):
-- Core control flow (if/while/for, break/continue)
-- Functions & variables
-- Arithmetic, comparison, bitwise, logical (short-circuit)
-- Ternary operator
-- Prefix/Postfix ++/-- (ints)
-- Compound assignments
-- Pointers (multi-level) & basic arrays
-- _Bool type
-- Preprocessor (delegated to clang -E) includes & macros
-- Basic literals: int, char, string
-- Minimal sizeof (primitive/expr returns 4 currently)
-
-Planned next: pointer arithmetic scaling, comma operator, do-while, switch.
-
 ## Supported Platforms
 - macOS 
 - Ubuntu 

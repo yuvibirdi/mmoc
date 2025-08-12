@@ -1,0 +1,119 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-release:
+    name: Build Release (${{ matrix.os }})
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: ccomp
+            asset_name: ccomp-linux-x64
+          - os: macos-latest
+            artifact_name: ccomp
+            asset_name: ccomp-macos-x64
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup CMake
+        uses: lukka/get-cmake@latest
+
+      - name: Install dependencies (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl wget openjdk-17-jre-headless
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install openjdk curl
+
+      - name: Cache generated parser
+        uses: actions/cache@v4
+        with:
+          path: generated/
+          key: antlr-${{ runner.os }}-${{ hashFiles('grammar/C.g4') }}
+
+      - name: Generate ANTLR parser files and install dependencies
+        run: ./setup.sh
+
+      - name: Configure CMake
+        run: |
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            export LLVM_DIR="$(brew --prefix llvm)/lib/cmake/llvm"
+            cmake -B build -G Ninja \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_C_COMPILER=/usr/bin/clang \
+              -DCMAKE_CXX_COMPILER=/usr/bin/clang++ \
+              -DCMAKE_CXX_FLAGS="-stdlib=libc++" \
+              -DCMAKE_EXE_LINKER_FLAGS="-stdlib=libc++"
+          else
+            cmake -B build -G Ninja \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_C_COMPILER=clang \
+              -DCMAKE_CXX_COMPILER=clang++
+          fi
+
+      - name: Build
+        run: cmake --build build --target all -j
+
+      - name: Test
+        run: python3 tests/test_runner.py
+
+      - name: Strip binary
+        run: strip build/${{ matrix.artifact_name }}
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: build/${{ matrix.artifact_name }}
+
+  create-release:
+    name: Create Release
+    needs: build-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: MMOC ${{ github.ref }}
+          draft: false
+          prerelease: true
+
+      - name: Upload Linux Binary
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./ccomp-linux-x64/ccomp
+          asset_name: ccomp-linux-x64
+          asset_content_type: application/octet-stream
+
+      - name: Upload macOS Binary
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./ccomp-macos-x64/ccomp
+          asset_name: ccomp-macos-x64
+          asset_content_type: application/octet-stream
