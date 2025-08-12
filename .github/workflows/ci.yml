@@ -81,6 +81,9 @@ jobs:
           path: generated/
           key: antlr-${{ hashFiles('grammar/C.g4') }}
 
+      - name: Generate ANTLR parser files
+        run: ./setup.sh
+
       - name: Configure CMake
         run: |
           cmake -B build -G Ninja \
@@ -127,6 +130,9 @@ jobs:
       - name: Install deps (Arch)
         run: |
           pacman -Sy --noconfirm --needed base-devel llvm clang lld cmake ninja python git cppcheck curl jdk-openjdk antlr4-runtime antlr4
+
+      - name: Generate ANTLR parser files
+        run: ./setup.sh
 
       - name: Configure
         env:

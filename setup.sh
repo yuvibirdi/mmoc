@@ -32,7 +32,7 @@ if [[ "$OS" == "macos" ]]; then
     
     brew install \
         llvm \
-        antlr4 \
+        antlr \
         antlr4-cpp-runtime \
         cmake \
         ninja \
@@ -69,6 +69,38 @@ elif [[ "$OS" == "linux" ]]; then
     sudo ln -sf /usr/bin/clang++-17 /usr/bin/clang++ || true
 fi
 
+echo ""
+echo "Generating ANTLR parser files..."
+echo "================================"
+
+# Create generated directory
+mkdir -p generated/
+
+# Find ANTLR tool (antlr4 on Linux, antlr on macOS)
+ANTLR_TOOL=""
+if command -v antlr4 &> /dev/null; then
+    ANTLR_TOOL="antlr4"
+elif command -v antlr &> /dev/null; then
+    ANTLR_TOOL="antlr"
+else
+    echo "Error: Could not find ANTLR tool (antlr4 or antlr)"
+    exit 1
+fi
+
+echo "Using ANTLR tool: $ANTLR_TOOL"
+
+# Generate ANTLR files
+$ANTLR_TOOL -Dlanguage=Cpp -visitor -o generated -Xexact-output-dir grammar/C.g4
+
+# Apply compatibility patches
+if [[ -f cmake/patch_antlr.sh ]]; then
+    echo "Applying ANTLR compatibility patches..."
+    bash cmake/patch_antlr.sh generated
+else
+    echo "Warning: patch_antlr.sh not found, skipping patches"
+fi
+
+echo "ANTLR parser files generated successfully!"
 echo ""
 echo "Dependencies installed successfully!"
 echo ""
