@@ -79,9 +79,43 @@ jobs:
           name: ${{ matrix.asset_name }}
           path: build/${{ matrix.artifact_name }}
 
+  build-arch:
+    name: Build Release (Arch Linux)
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate ANTLR parser files and install dependencies
+        run: ./setup.sh
+
+      - name: Configure CMake
+        env:
+          ANTLR4_INCLUDE: /usr/include/antlr4-runtime
+          ANTLR4_LIB: /usr/lib
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --target all -j
+
+      - name: Test
+        run: python3 tests/test_runner.py
+
+      - name: Strip binary
+        run: strip build/ccomp
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: ccomp-arch-x64
+          path: build/ccomp
+
   create-release:
     name: Create Release
-    needs: build-release
+    needs: [build-release, build-arch]
+    if: always() && (needs.build-release.result == 'success')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -91,12 +125,35 @@ jobs:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
 
+      - name: List downloaded artifacts
+        run: |
+          echo "Downloaded artifacts:"
+          ls -la
+          find . -name "ccomp" -type f
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          # Copy and rename binaries with proper extensions
+          if [ -f ccomp-linux-x64/ccomp ]; then
+            cp ccomp-linux-x64/ccomp release-assets/ccomp-linux-x64
+            chmod +x release-assets/ccomp-linux-x64
+          fi
+          if [ -f ccomp-macos-x64/ccomp ]; then
+            cp ccomp-macos-x64/ccomp release-assets/ccomp-macos-x64
+            chmod +x release-assets/ccomp-macos-x64
+          fi
+          if [ -f ccomp-arch-x64/ccomp ]; then
+            cp ccomp-arch-x64/ccomp release-assets/ccomp-arch-x64
+            chmod +x release-assets/ccomp-arch-x64
+          fi
+          echo "Release assets prepared:"
+          ls -la release-assets/
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           name: MMOC ${{ github.ref_name }}
           prerelease: true
           generate_release_notes: true
-          files: |
-            ccomp-linux-x64/ccomp
-            ccomp-macos-x64/ccomp
+          files: release-assets/*
