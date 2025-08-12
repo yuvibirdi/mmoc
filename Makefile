@@ -38,8 +38,8 @@ test: build
 # Integration test
 test-integration: build
 	@echo "Running integration tests..."
-	./build/ccomp test/inputs/hello.c -o test_hello && ./test_hello
-	./build/ccomp test/inputs/arithmetic.c -o test_arithmetic && ./test_arithmetic
+	./build/mmoc test/inputs/hello.c -o test_hello && ./test_hello
+	./build/mmoc test/inputs/arithmetic.c -o test_arithmetic && ./test_arithmetic
 	@echo "Integration tests passed!"
 
 # Clean build artifacts

@@ -15,10 +15,10 @@ jobs:
         include:
           - name: "Linux x64"
             os: ubuntu-latest
-            asset_name: ccomp-linux-x64
+            asset_name: mmoc-linux-x64
           - name: "macOS Apple Silicon"
             os: macos-latest
-            asset_name: ccomp-macos-arm64
+            asset_name: mmoc-macos-arm64
     runs-on: ${{ matrix.os }}
     
     steps:
@@ -71,13 +71,13 @@ jobs:
         run: python3 tests/test_runner.py
 
       - name: Strip binary
-        run: strip build/ccomp
+        run: strip build/mmoc
 
       - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.asset_name }}
-          path: build/ccomp
+          path: build/mmoc
 
   build-arch:
     name: Build Release (Arch Linux)
@@ -104,13 +104,13 @@ jobs:
         run: python3 tests/test_runner.py
 
       - name: Strip binary
-        run: strip build/ccomp
+        run: strip build/mmoc
 
       - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
-          name: ccomp-arch-x64
-          path: build/ccomp
+          name: mmoc-arch-x64
+          path: build/mmoc
 
   create-release:
     name: Create Release
@@ -129,23 +129,23 @@ jobs:
         run: |
           echo "Downloaded artifacts:"
           ls -la
-          find . -name "ccomp" -type f
+          find . -name "mmoc" -type f
 
       - name: Prepare release assets
         run: |
           mkdir -p release-assets
           # Copy and rename binaries with proper extensions
-          if [ -f ccomp-linux-x64/ccomp ]; then
-            cp ccomp-linux-x64/ccomp release-assets/ccomp-linux-x64
-            chmod +x release-assets/ccomp-linux-x64
+          if [ -f mmoc-linux-x64/mmoc ]; then
+            cp mmoc-linux-x64/mmoc release-assets/mmoc-linux-x64
+            chmod +x release-assets/mmoc-linux-x64
           fi
-          if [ -f ccomp-macos-arm64/ccomp ]; then
-            cp ccomp-macos-arm64/ccomp release-assets/ccomp-macos-arm64
-            chmod +x release-assets/ccomp-macos-arm64
+          if [ -f mmoc-macos-arm64/mmoc ]; then
+            cp mmoc-macos-arm64/mmoc release-assets/mmoc-macos-arm64
+            chmod +x release-assets/mmoc-macos-arm64
           fi
-          if [ -f ccomp-arch-x64/ccomp ]; then
-            cp ccomp-arch-x64/ccomp release-assets/ccomp-arch-x64
-            chmod +x release-assets/ccomp-arch-x64
+          if [ -f mmoc-arch-x64/mmoc ]; then
+            cp mmoc-arch-x64/mmoc release-assets/mmoc-arch-x64
+            chmod +x release-assets/mmoc-arch-x64
           fi
           echo "Release assets prepared:"
           ls -la release-assets/

@@ -1,4 +1,4 @@
-// RUN: %ccomp %s -o %t && %t
+// RUN: %mmoc %s -o %t && %t
 // Test complex macro functionality
 
 #define ADD(a, b) ((a) + (b))

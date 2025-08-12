@@ -204,7 +204,7 @@ bool Driver::linkExecutable(const std::string &objectFile, const std::string &ex
 
 void Driver::log(const std::string &message) {
     if (verbose_) {
-        std::cout << "[ccomp] " << message << std::endl;
+        std::cout << "[mmoc] " << message << std::endl;
     }
 }
 

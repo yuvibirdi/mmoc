@@ -1,4 +1,4 @@
-// RUN: %ccomp %s | %run ; if [ $? -eq 25 ]; then echo "PASS"; else echo "FAIL (got $?)"; fi
+// RUN: %mmoc %s | %run ; if [ $? -eq 25 ]; then echo "PASS"; else echo "FAIL (got $?)"; fi
 // Test compound assignment operators
 
 int main() {

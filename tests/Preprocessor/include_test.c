@@ -1,4 +1,4 @@
-// RUN: %ccomp %s -o %t && %t
+// RUN: %mmoc %s -o %t && %t
 // Test include directive functionality
 
 #define HELPER_VALUE 42

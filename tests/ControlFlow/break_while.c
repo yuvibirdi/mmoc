@@ -1,4 +1,4 @@
-// RUN: %ccomp %s | %run ; if [ $? -eq 15 ]; then echo "PASS"; else echo "FAIL (got $?)"; fi
+// RUN: %mmoc %s | %run ; if [ $? -eq 15 ]; then echo "PASS"; else echo "FAIL (got $?)"; fi
 // Test break statement in while loop
 
 int main() {

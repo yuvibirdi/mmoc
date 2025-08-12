@@ -1,5 +1,5 @@
 // Test if statements with comparisons
-// RUN: %ccomp %s -o %t && %t
+// RUN: %mmoc %s -o %t && %t
 // RUN: test $? -eq 99
 
 int main() {

@@ -1,4 +1,4 @@
-// RUN: %ccomp %s | %run ; if [ $? -eq 42 ]; then echo "PASS"; else echo "FAIL (got $?)"; fi
+// RUN: %mmoc %s | %run ; if [ $? -eq 42 ]; then echo "PASS"; else echo "FAIL (got $?)"; fi
 // Simple array test
 
 int main() {

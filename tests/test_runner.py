@@ -49,7 +49,7 @@ class MMOCTestSuite:
             '%s': str(path),
             '%t': str(path.with_suffix('.tmp')),
             '%T': str(path.parent / 'Output'),
-            '%ccomp': str(self.compiler_path.absolute()),
+            '%mmoc': str(self.compiler_path.absolute()),
         }
         for key, value in subs.items():
             cmd = cmd.replace(key, value)
@@ -62,7 +62,7 @@ class MMOCTestSuite:
             directives = self.parse_directives(path)
             if directives['unsupported']:
                 return TestResult(name, 'SKIP', time.time() - start, 'Test unsupported')
-            runs = directives['run'] or ["%ccomp %s -o %t && %t"]
+            runs = directives['run'] or ["%mmoc %s -o %t && %t"]
             out_lines: List[str] = []
             err_lines: List[str] = []
             for r in runs:
@@ -138,7 +138,7 @@ class MMOCTestSuite:
 
 def main():
     parser = argparse.ArgumentParser(description='MMOC Test Suite')
-    parser.add_argument('-c', '--compiler', default='./build/ccomp')
+    parser.add_argument('-c', '--compiler', default='./build/mmoc')
     parser.add_argument('-t', '--test-dir', default='./tests')
     parser.add_argument('-f', '--filter')
     args = parser.parse_args()

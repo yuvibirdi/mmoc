@@ -1,5 +1,5 @@
 // Test variable assignment
-// RUN: %ccomp %s -o %t && %t
+// RUN: %mmoc %s -o %t && %t
 // RUN: test $? -eq 15
 
 int main() {

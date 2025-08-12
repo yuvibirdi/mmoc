@@ -8,7 +8,7 @@
 
 1. Parse **full C99** (extendible to C11).
 2. Lower to **LLVM IR** and emit optimized native code.
-3. Command-line driver `ccomp <file.c>` producing `a.out`.
+3. Command-line driver `mmoc <file.c>` producing `a.out`.
 4. Clean architecture; all new code in **modern C++20**.
 
 ---

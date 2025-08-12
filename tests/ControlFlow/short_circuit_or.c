@@ -1,4 +1,4 @@
-// RUN: %ccomp %s | %run ; if [ $? -eq 5 ]; then echo "PASS"; else echo "FAIL (got $?)"; fi
+// RUN: %mmoc %s | %run ; if [ $? -eq 5 ]; then echo "PASS"; else echo "FAIL (got $?)"; fi
 // Short-circuit OR: second side must NOT execute when first is true.
 
 int side_effect() { return 42; }

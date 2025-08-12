@@ -1,4 +1,4 @@
-// RUN: %ccomp %s | %run ; if [ $? -eq 27 ]; then echo "PASS"; else echo "FAIL (got $?)"; fi
+// RUN: %mmoc %s | %run ; if [ $? -eq 27 ]; then echo "PASS"; else echo "FAIL (got $?)"; fi
 // Test prefix and postfix ++/-- semantics
 // After sequence: x starts 5
 // a=++x -> x=6 a=6

@@ -1,5 +1,5 @@
 // Test function definitions and calls
-// RUN: %ccomp %s -o %t && %t
+// RUN: %mmoc %s -o %t && %t
 // RUN: test $? -eq 5
 
 int add(int a, int b) {

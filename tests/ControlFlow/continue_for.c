@@ -1,4 +1,4 @@
-// RUN: %ccomp %s | %run ; if [ $? -eq 12 ]; then echo "PASS"; else echo "FAIL (got $?)"; fi
+// RUN: %mmoc %s | %run ; if [ $? -eq 12 ]; then echo "PASS"; else echo "FAIL (got $?)"; fi
 // Test continue statement in for loop
 
 int main() {

@@ -25,13 +25,13 @@ cmake --build build -j
 ## Usage
 ```bash
 # Compile C source to executable
-./build/ccomp file.c -o a.out
+./build/mmoc file.c -o a.out
 
 # Emit LLVM IR
-./build/ccomp file.c -d -o file.ll
+./build/mmoc file.c -d -o file.ll
 
 # Verbose
-./build/ccomp file.c -v -o prog
+./build/mmoc file.c -v -o prog
 ```
 
 ## Testing

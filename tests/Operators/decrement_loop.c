@@ -1,4 +1,4 @@
-// RUN: %ccomp %s | %run ; if [ $? -eq 6 ]; then echo "PASS"; else echo "FAIL (got $?)"; fi
+// RUN: %mmoc %s | %run ; if [ $? -eq 6 ]; then echo "PASS"; else echo "FAIL (got $?)"; fi
 // Test mixed prefix/postfix ++ and --
 int main(){
     int x=3;

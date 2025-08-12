@@ -1,4 +1,4 @@
-// RUN: %ccomp %s | %run ; if [ $? -eq 9 ]; then echo "PASS"; else echo "FAIL (got $?)"; fi
+// RUN: %mmoc %s | %run ; if [ $? -eq 9 ]; then echo "PASS"; else echo "FAIL (got $?)"; fi
 // Nested ternary and logical mixing
 int main(){
     int x=2,y=4,z=9;

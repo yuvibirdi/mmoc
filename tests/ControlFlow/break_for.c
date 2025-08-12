@@ -1,4 +1,4 @@
-// RUN: %ccomp %s | %run ; if [ $? -eq 3 ]; then echo "PASS"; else echo "FAIL (got $?)"; fi
+// RUN: %mmoc %s | %run ; if [ $? -eq 3 ]; then echo "PASS"; else echo "FAIL (got $?)"; fi
 // Test break statement in for loop
 
 int main() {

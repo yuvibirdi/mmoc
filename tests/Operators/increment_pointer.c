@@ -1,5 +1,5 @@
 // Pointer increment test (no scaling yet, just ensuring ++ applies)
-// RUN: %ccomp %s | %run ; if [ $? -eq 3 ]; then echo PASS; else echo FAIL; fi
+// RUN: %mmoc %s | %run ; if [ $? -eq 3 ]; then echo PASS; else echo FAIL; fi
 int main(){
     int x=2;
     int *p=&x;

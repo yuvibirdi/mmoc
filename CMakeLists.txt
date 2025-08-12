@@ -134,11 +134,11 @@ add_library(cutils STATIC
 target_include_directories(cutils PUBLIC src)
 
 # Main compiler executable
-add_executable(ccomp
+add_executable(mmoc
     src/driver/main.cpp
     src/driver/Driver.cpp
 )
-target_link_libraries(ccomp PRIVATE 
+target_link_libraries(mmoc PRIVATE 
     cparser 
     csema 
     ccodegen 
@@ -146,7 +146,7 @@ target_link_libraries(ccomp PRIVATE
     cutils
 )
 # Link LLVM libraries separately to avoid duplicates
-target_link_libraries(ccomp PRIVATE ${LLVM_LIBS})
+target_link_libraries(mmoc PRIVATE ${LLVM_LIBS})
 
 # Enable testing
 enable_testing()
@@ -154,6 +154,6 @@ enable_testing()
 # Integration tests (keep minimal example if needed)
 add_test(
     NAME integration_hello_world
-    COMMAND ${CMAKE_COMMAND} -E env $<TARGET_FILE:ccomp> ${CMAKE_SOURCE_DIR}/tests/Basic/simple_return.c
+    COMMAND ${CMAKE_COMMAND} -E env $<TARGET_FILE:mmoc> ${CMAKE_SOURCE_DIR}/tests/Basic/simple_return.c
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
 )

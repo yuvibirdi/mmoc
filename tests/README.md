@@ -21,7 +21,7 @@ Organized by feature area:
 // UNSUPPORTED: platform
 
 ## Substitutions
-- `%ccomp` compiler path
+- `%mmoc` compiler path
 - `%s` source file
 - `%t` temp output file
 - `%T` temp directory
@@ -30,7 +30,7 @@ Organized by feature area:
 ```
 python3 tests/test_runner.py            # all
 python3 tests/test_runner.py -f Pointers # filtered
-python3 tests/test_runner.py -c ./build/ccomp
+python3 tests/test_runner.py -c ./build/mmoc
 ```
 
 ## Current Status

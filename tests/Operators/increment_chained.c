@@ -1,5 +1,5 @@
 // Chained increment test
-// RUN: %ccomp %s | %run ; if [ $? -eq 11 ]; then echo PASS; else echo FAIL; fi
+// RUN: %mmoc %s | %run ; if [ $? -eq 11 ]; then echo PASS; else echo FAIL; fi
 int main(){
     int x=5;
     int a=++x; // x=6, a=6

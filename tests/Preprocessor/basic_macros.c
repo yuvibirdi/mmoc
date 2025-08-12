@@ -1,4 +1,4 @@
-// RUN: %ccomp %s -o %t && %t
+// RUN: %mmoc %s -o %t && %t
 // Test basic macro expansion functionality
 
 #define PI 3
