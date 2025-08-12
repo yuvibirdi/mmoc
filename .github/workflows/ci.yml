@@ -67,22 +67,70 @@ jobs:
             exit 1
           fi
 
-      - name: Setup environment (macOS)
-        if: runner.os == 'macOS'
-        run: echo "$(brew --prefix llvm)/bin" >> $GITHUB_PATH
+      - name: Show compiler information
+        run: |
+          echo "=== Compiler Information ==="
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            echo "System clang version:"
+            /usr/bin/clang --version
+            echo "Homebrew LLVM path: $(brew --prefix llvm)"
+            echo "LLVM config location: $(brew --prefix llvm)/lib/cmake/llvm"
+          else
+            echo "Default clang version:"
+            clang --version
+          fi
 
       - name: Configure CMake
         run: |
-          cmake -B build -G Ninja \
-            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
-            -DCMAKE_C_COMPILER=clang \
-            -DCMAKE_CXX_COMPILER=clang++
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            # Use system clang on macOS to avoid Homebrew LLVM compatibility issues
+            # Set LLVM_DIR to help CMake find the Homebrew LLVM installation
+            export LLVM_DIR="$(brew --prefix llvm)/lib/cmake/llvm"
+            # Add additional flags for macOS to ensure compatibility
+            cmake -B build -G Ninja \
+              -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+              -DCMAKE_C_COMPILER=/usr/bin/clang \
+              -DCMAKE_CXX_COMPILER=/usr/bin/clang++ \
+              -DCMAKE_CXX_FLAGS="-stdlib=libc++" \
+              -DCMAKE_EXE_LINKER_FLAGS="-stdlib=libc++"
+          else
+            # Use default compilers on Linux
+            cmake -B build -G Ninja \
+              -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+              -DCMAKE_C_COMPILER=clang \
+              -DCMAKE_CXX_COMPILER=clang++
+          fi
 
       - name: Build
         run: cmake --build build --target all -j
 
+      - name: Quick compiler test
+        run: |
+          echo "Testing basic compilation..."
+          echo 'int main() { return 42; }' > test_basic.c
+          echo "Running compiler with debug output..."
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            # On macOS, run with additional debugging
+            DYLD_PRINT_LIBRARIES=1 ./build/ccomp test_basic.c -o test_basic.tmp || {
+              echo "Compilation failed, checking for core dumps..."
+              ls -la core* 2>/dev/null || echo "No core dumps found"
+              echo "Checking system limits..."
+              ulimit -a
+              exit 1
+            }
+          else
+            ./build/ccomp test_basic.c -o test_basic.tmp
+          fi
+          echo "Basic compilation successful!"
+
       - name: Python test suite
-        run: python3 tests/test_runner.py
+        run: |
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            # Set environment variables to help with potential memory/hash issues
+            export MALLOC_CHECK_=0
+            export DYLD_LIBRARY_PATH="$(brew --prefix llvm)/lib:$DYLD_LIBRARY_PATH"
+          fi
+          python3 tests/test_runner.py
 
       - name: Upload build logs (on failure)
         if: failure()

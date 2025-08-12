@@ -46,7 +46,8 @@ if [[ "$OS" == "macos" ]]; then
     
     echo "Setting up environment..."
     LLVM_PATH="$(brew --prefix llvm)"
-    echo "Add to your shell profile:"
+    echo "Note: Using system clang/clang++ compilers with Homebrew LLVM libraries"
+    echo "If you need to use Homebrew LLVM compilers, add to your shell profile:"
     echo "export PATH=\"$LLVM_PATH/bin:\$PATH\""
     echo "export LDFLAGS=\"-L$LLVM_PATH/lib\""
     echo "export CPPFLAGS=\"-I$LLVM_PATH/include\""
