@@ -13,6 +13,7 @@ fi
 # Detect what needs patching by checking the generated files
 NEEDS_TOKEN_NAMES_FIX=false
 NEEDS_SERIALIZED_ATN_FIX=false
+NEEDS_INTERNAL_NAMESPACE_FIX=false
 
 if grep -q "getTokenNames() const override" "$GENERATED_DIR"/*.h 2>/dev/null; then
     NEEDS_TOKEN_NAMES_FIX=true
@@ -20,6 +21,10 @@ fi
 
 if grep -q "std::vector<uint16_t> getSerializedATN" "$GENERATED_DIR"/*.h 2>/dev/null; then
     NEEDS_SERIALIZED_ATN_FIX=true
+fi
+
+if grep -q "antlr4::internal::" "$GENERATED_DIR"/*.cpp 2>/dev/null; then
+    NEEDS_INTERNAL_NAMESPACE_FIX=true
 fi
 
 # Fix 1: Remove deprecated getTokenNames override that doesn't exist in newer ANTLR runtime
@@ -61,6 +66,28 @@ fi
 echo "Applying string conversion fixes..."
 sed -i.bak 's/std::string name = _vocabulary\.getLiteralName(i)/std::string name = std::string(_vocabulary.getLiteralName(i))/' "$GENERATED_DIR/CLexer.cpp" 2>/dev/null || true
 sed -i.bak 's/std::string name = _vocabulary\.getLiteralName(i)/std::string name = std::string(_vocabulary.getLiteralName(i))/' "$GENERATED_DIR/CParser.cpp" 2>/dev/null || true
+
+# Fix 8: Remove antlr4::internal namespace references (newer ANTLR4 versions)
+if [[ "$NEEDS_INTERNAL_NAMESPACE_FIX" == "true" ]]; then
+    echo "Fixing antlr4::internal namespace references..."
+    sed -i.bak 's/::antlr4::internal::OnceFlag/std::once_flag/g' "$GENERATED_DIR/CLexer.cpp" 2>/dev/null || true
+    sed -i.bak 's/::antlr4::internal::OnceFlag/std::once_flag/g' "$GENERATED_DIR/CParser.cpp" 2>/dev/null || true
+    sed -i.bak 's/::antlr4::internal::call_once/std::call_once/g' "$GENERATED_DIR/CLexer.cpp" 2>/dev/null || true
+    sed -i.bak 's/::antlr4::internal::call_once/std::call_once/g' "$GENERATED_DIR/CParser.cpp" 2>/dev/null || true
+    
+    # Add mutex header if not present
+    if ! grep -q "#include <mutex>" "$GENERATED_DIR/CLexer.cpp" 2>/dev/null; then
+        sed -i.bak '1i\
+#include <mutex>
+' "$GENERATED_DIR/CLexer.cpp" 2>/dev/null || true
+    fi
+    
+    if ! grep -q "#include <mutex>" "$GENERATED_DIR/CParser.cpp" 2>/dev/null; then
+        sed -i.bak '1i\
+#include <mutex>
+' "$GENERATED_DIR/CParser.cpp" 2>/dev/null || true
+    fi
+fi
 
 # Clean up backup files
 rm -f "$GENERATED_DIR"/*.bak 2>/dev/null || true
