@@ -124,6 +124,8 @@ echo "================================"
 
 # Create generated directory
 mkdir -p generated/
+# Clean any existing generated files to avoid stale artifacts across versions
+rm -f generated/*.cpp generated/*.h generated/*.interp generated/*.tokens 2>/dev/null || true
 
 # Find ANTLR tool (antlr4 on Linux, antlr on macOS)
 ANTLR_TOOL=""

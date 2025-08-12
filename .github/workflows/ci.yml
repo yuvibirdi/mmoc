@@ -37,10 +37,14 @@ jobs:
         uses: actions/cache@v4
         with:
           path: generated/
-          key: antlr-${{ hashFiles('grammar/C.g4') }}
+          key: antlr-${{ runner.os }}-${{ hashFiles('grammar/C.g4') }}
 
       - name: Generate ANTLR parser files and install dependencies
         run: ./setup.sh
+
+      - name: Show ANTLR tool version
+        run: |
+          (antlr4 -version || true) || (antlr -version || true)
 
       - name: Setup environment (macOS)
         if: runner.os == 'macOS'
