@@ -61,6 +61,7 @@ elif [[ "$OS" == "linux" ]]; then
         clang-17 \
         lld-17 \
         libantlr4-runtime-dev \
+        libantlr4-runtime4.9 \
         cmake \
         ninja-build \
         pkg-config \
@@ -76,13 +77,13 @@ elif [[ "$OS" == "linux" ]]; then
     sudo ln -sf /usr/bin/clang++-17 /usr/bin/clang++ || true
     
     echo "Installing ANTLR4 tool..."
-    # Install ANTLR4 tool since Ubuntu doesn't have antlr4 package in standard repos
+    # Install ANTLR4 tool - use version 4.9.3 to match Ubuntu's runtime
     cd /tmp
-    wget https://www.antlr.org/download/antlr-4.13.1-complete.jar
+    wget https://www.antlr.org/download/antlr-4.9.3-complete.jar
     sudo mkdir -p /usr/local/lib
-    sudo mv antlr-4.13.1-complete.jar /usr/local/lib/
+    sudo mv antlr-4.9.3-complete.jar /usr/local/lib/
     echo '#!/bin/bash' | sudo tee /usr/local/bin/antlr4
-    echo 'java -jar /usr/local/lib/antlr-4.13.1-complete.jar "$@"' | sudo tee -a /usr/local/bin/antlr4
+    echo 'java -jar /usr/local/lib/antlr-4.9.3-complete.jar "$@"' | sudo tee -a /usr/local/bin/antlr4
     sudo chmod +x /usr/local/bin/antlr4
     cd - > /dev/null
 
