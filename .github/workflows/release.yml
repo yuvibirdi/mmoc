@@ -7,18 +7,18 @@ on:
 
 jobs:
   build-release:
-    name: Build Release (${{ matrix.os }})
+    name: Build Release (${{ matrix.name }})
     permissions:
       contents: read
     strategy:
       matrix:
         include:
-          - os: ubuntu-latest
-            artifact_name: ccomp
+          - name: "Linux x64"
+            os: ubuntu-latest
             asset_name: ccomp-linux-x64
-          - os: macos-latest
-            artifact_name: ccomp
-            asset_name: ccomp-macos-x64
+          - name: "macOS Apple Silicon"
+            os: macos-latest
+            asset_name: ccomp-macos-arm64
     runs-on: ${{ matrix.os }}
     
     steps:
@@ -71,13 +71,13 @@ jobs:
         run: python3 tests/test_runner.py
 
       - name: Strip binary
-        run: strip build/${{ matrix.artifact_name }}
+        run: strip build/ccomp
 
       - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.asset_name }}
-          path: build/${{ matrix.artifact_name }}
+          path: build/ccomp
 
   build-arch:
     name: Build Release (Arch Linux)
@@ -139,9 +139,9 @@ jobs:
             cp ccomp-linux-x64/ccomp release-assets/ccomp-linux-x64
             chmod +x release-assets/ccomp-linux-x64
           fi
-          if [ -f ccomp-macos-x64/ccomp ]; then
-            cp ccomp-macos-x64/ccomp release-assets/ccomp-macos-x64
-            chmod +x release-assets/ccomp-macos-x64
+          if [ -f ccomp-macos-arm64/ccomp ]; then
+            cp ccomp-macos-arm64/ccomp release-assets/ccomp-macos-arm64
+            chmod +x release-assets/ccomp-macos-arm64
           fi
           if [ -f ccomp-arch-x64/ccomp ]; then
             cp ccomp-arch-x64/ccomp release-assets/ccomp-arch-x64
