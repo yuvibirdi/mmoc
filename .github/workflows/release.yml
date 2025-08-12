@@ -8,6 +8,8 @@ on:
 jobs:
   build-release:
     name: Build Release (${{ matrix.os }})
+    permissions:
+      contents: read
     strategy:
       matrix:
         include:
@@ -81,6 +83,8 @@ jobs:
     name: Create Release
     needs: build-release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -88,32 +92,11 @@ jobs:
         uses: actions/download-artifact@v4
 
       - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ github.ref }}
-          release_name: MMOC ${{ github.ref }}
-          draft: false
+          name: MMOC ${{ github.ref_name }}
           prerelease: true
-
-      - name: Upload Linux Binary
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./ccomp-linux-x64/ccomp
-          asset_name: ccomp-linux-x64
-          asset_content_type: application/octet-stream
-
-      - name: Upload macOS Binary
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./ccomp-macos-x64/ccomp
-          asset_name: ccomp-macos-x64
-          asset_content_type: application/octet-stream
+          generate_release_notes: true
+          files: |
+            ccomp-linux-x64/ccomp
+            ccomp-macos-x64/ccomp
