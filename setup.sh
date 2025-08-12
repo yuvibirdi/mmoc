@@ -56,12 +56,11 @@ elif [[ "$OS" == "linux" ]]; then
     
     sudo apt-get update
     sudo apt-get install -y \
-        llvm-17 \
-        llvm-17-dev \
-        clang-17 \
-        lld-17 \
+        llvm-16 \
+        llvm-16-dev \
+        clang-16 \
+        lld-16 \
         libantlr4-runtime-dev \
-        antlr4 \
         cmake \
         ninja-build \
         pkg-config \
@@ -72,11 +71,28 @@ elif [[ "$OS" == "linux" ]]; then
         wget
     
     echo "Creating symlinks..."
-    sudo ln -sf /usr/bin/llvm-config-17 /usr/bin/llvm-config || true
-    sudo ln -sf /usr/bin/clang-17 /usr/bin/clang || true
-    sudo ln -sf /usr/bin/clang++-17 /usr/bin/clang++ || true
+    sudo ln -sf /usr/bin/llvm-config-16 /usr/bin/llvm-config || true
+    sudo ln -sf /usr/bin/clang-16 /usr/bin/clang || true
+    sudo ln -sf /usr/bin/clang++-16 /usr/bin/clang++ || true
 
-    echo "ANTLR tool installed from apt (antlr4)."
+    # Download and install a compatible ANTLR4 tool version
+    echo "Installing ANTLR4 tool..."
+    ANTLR_VERSION="4.13.2"
+    ANTLR_JAR="/usr/local/lib/antlr-${ANTLR_VERSION}-complete.jar"
+    
+    if [[ ! -f "$ANTLR_JAR" ]]; then
+        sudo mkdir -p /usr/local/lib
+        sudo curl -o "$ANTLR_JAR" "https://www.antlr.org/download/antlr-${ANTLR_VERSION}-complete.jar"
+    fi
+    
+    # Create antlr4 wrapper script
+    sudo tee /usr/local/bin/antlr4 > /dev/null << EOF
+#!/bin/bash
+java -jar "$ANTLR_JAR" "\$@"
+EOF
+    sudo chmod +x /usr/local/bin/antlr4
+    
+    echo "ANTLR4 tool version $ANTLR_VERSION installed."
 
 elif [[ "$OS" == "arch" ]]; then
     echo "Installing dependencies via pacman..."

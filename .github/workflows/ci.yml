@@ -42,9 +42,30 @@ jobs:
       - name: Generate ANTLR parser files and install dependencies
         run: ./setup.sh
 
+      - name: Verify generated files
+        run: |
+          echo "Checking generated files..."
+          ls -la generated/
+          echo "Checking for compatibility issues..."
+          if grep -r "getTokenNames.*override" generated/ 2>/dev/null; then
+            echo "ERROR: Found unpatched getTokenNames override"
+            exit 1
+          fi
+          echo "Generated files look good!"
+
       - name: Show ANTLR tool version
         run: |
-          (antlr4 -version || true) || (antlr -version || true)
+          echo "Checking ANTLR tool version..."
+          if command -v antlr4 &> /dev/null; then
+            echo "Using antlr4:"
+            antlr4 2>&1 | head -1 || echo "antlr4 found but version check failed"
+          elif command -v antlr &> /dev/null; then
+            echo "Using antlr:"
+            antlr 2>&1 | head -1 || echo "antlr found but version check failed"
+          else
+            echo "No ANTLR tool found"
+            exit 1
+          fi
 
       - name: Setup environment (macOS)
         if: runner.os == 'macOS'
