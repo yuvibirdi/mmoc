@@ -2,9 +2,9 @@ cmake_minimum_required(VERSION 3.20)
 project(mmoc VERSION 0.1.0 LANGUAGES C CXX)
 
 # Prevent GCC usage on macOS due to ABI mismatch with Homebrew libraries
-if(APPLE AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    message(FATAL_ERROR "GCC on macOS is not supported. Homebrew's LLVM and ANTLR4 libraries are built with clang/libc++, causing ABI mismatch with GCC/libstdc++ (std::__1:: vs std::__cxx11::). Please use clang: export CC=clang CXX=clang++")
-endif()
+# if(APPLE AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+#     message(FATAL_ERROR "GCC on macOS is not supported. Homebrew's LLVM and ANTLR4 libraries are built with clang/libc++, causing ABI mismatch with GCC/libstdc++ (std::__1:: vs std::__cxx11::). Please use clang: export CC=clang CXX=clang++")
+# endif()
 
 # Set C++ standard and compiler flags
 set(CMAKE_CXX_STANDARD 20)

@@ -47,7 +47,6 @@ GitHub Actions builds on macOS, Ubuntu and Arch. Testing using the Python test h
 ## Development Notes
 - Parser: ANTLR4 generated from C.g4 (C11 grammar). ASTBuilder narrows to implemented subset.
 - IR: Opaque pointer mode, integer-focused semantics. Future: richer type system & promotions.
-- Preprocessing: external clang -E invocation.
 
 ## Implementation Status: 
 See STATUS.md for the detailed status.
