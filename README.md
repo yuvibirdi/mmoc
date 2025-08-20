@@ -36,17 +36,13 @@ cmake --build build -j
 
 ## Testing
 ```bash
-python3 tests/test_runner.py               # all tests
+ython3 tests/test_runner.py               # all tests
 python3 tests/test_runner.py -f Operators  # filter
-ctest --test-dir build --output-on-failure # TODO unit tests
+ctest --test-dir build --output-on-failure # TODO: UNIT TESTS NOT YET IMPLEMENTED
 ```
 
 ## CI
 GitHub Actions builds on macOS, Ubuntu and Arch. Testing using the Python test harness.
 
-## Development Notes
-- Parser: ANTLR4 generated from C.g4 (C11 grammar). ASTBuilder narrows to implemented subset.
-- IR: Opaque pointer mode, integer-focused semantics. Future: richer type system & promotions.
-
-## Implementation Status: 
-See STATUS.md for the detailed status.
+## Compatiblity Status: 
+See STATUS.md
